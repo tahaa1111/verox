@@ -57,22 +57,61 @@ async def _download_model_from_gcs(gcs_uri: str, local_path: str) -> None:
     logger.info("model_downloaded", local_path=local_path)
 
 
+def _detect_gpu_compute_capability() -> float:
+    """Return the CUDA compute capability of the first visible GPU, or 0.0 if none."""
+    try:
+        import subprocess as sp
+        out = sp.check_output(
+            ["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader"],
+            stderr=sp.DEVNULL, timeout=10,
+        ).decode().strip().splitlines()[0]
+        return float(out)
+    except Exception:
+        return 0.0
+
+
 async def _launch_vllm() -> None:
     global _vllm_proc
-    cmd = [
-        sys.executable, "-m", "vllm.entrypoints.openai.api_server",
-        "--model", MODEL_PATH,
-        "--quantization", "awq",
-        "--gpu-memory-utilization", "0.85",
-        "--max-model-len", "8192",
-        "--max-num-seqs", "16",
-        "--limit-mm-per-prompt", "image=1",
-        "--enforce-eager", "false",
-        "--disable-log-requests",
-        "--served-model-name", VLLM_MODEL_NAME,
-        "--host", "0.0.0.0",
-        "--port", str(VLLM_PORT),
-    ]
+    cc = _detect_gpu_compute_capability()
+    logger.info("gpu_compute_capability", cc=cc)
+
+    # AWQ CUDA kernels in vLLM require Ampere (sm80+).
+    # P100=sm60, T4=sm75 do NOT support vLLM's AWQ kernels.
+    # On those GPUs skip --quantization awq and use fp16 dequantised weights.
+    ampere_plus = cc >= 8.0
+
+    if ampere_plus:
+        cmd = [
+            sys.executable, "-m", "vllm.entrypoints.openai.api_server",
+            "--model", MODEL_PATH,
+            "--quantization", "awq",
+            "--dtype", "float16",
+            "--gpu-memory-utilization", "0.90",
+            "--max-model-len", "8192",
+            "--max-num-seqs", "16",
+            "--limit-mm-per-prompt", "image=1",
+            "--disable-log-requests",
+            "--served-model-name", VLLM_MODEL_NAME,
+            "--host", "0.0.0.0",
+            "--port", str(VLLM_PORT),
+        ]
+    else:
+        # Older GPU (P100/T4): no AWQ kernels, enforce-eager, smaller context window
+        cmd = [
+            sys.executable, "-m", "vllm.entrypoints.openai.api_server",
+            "--model", MODEL_PATH,
+            "--dtype", "float16",
+            "--gpu-memory-utilization", "0.90",
+            "--max-model-len", "4096",
+            "--max-num-seqs", "4",
+            "--limit-mm-per-prompt", "image=1",
+            "--enforce-eager",
+            "--disable-log-requests",
+            "--served-model-name", VLLM_MODEL_NAME,
+            "--host", "0.0.0.0",
+            "--port", str(VLLM_PORT),
+        ]
+
     lora_path = os.getenv("LORA_ADAPTER_PATH", "")
     if lora_path:
         cmd += ["--enable-lora", "--lora-modules", f"medibox-adapter={lora_path}"]
@@ -84,6 +123,12 @@ async def _wait_for_vllm(timeout: int = 300) -> None:
     deadline = time.time() + timeout
     async with httpx.AsyncClient() as client:
         while time.time() < deadline:
+            # Abort early if vLLM process has already crashed
+            if _vllm_proc and _vllm_proc.poll() is not None:
+                raise RuntimeError(
+                    f"vLLM subprocess exited with code {_vllm_proc.returncode} "
+                    "before becoming healthy"
+                )
             try:
                 r = await client.get(f"{VLLM_URL}/health", timeout=5.0)
                 if r.status_code == 200:
@@ -109,7 +154,7 @@ async def startup():
     if AIP_STORAGE_URI:
         await _download_model_from_gcs(AIP_STORAGE_URI, MODEL_PATH)
     await _launch_vllm()
-    await _wait_for_vllm(timeout=300)
+    await _wait_for_vllm(timeout=600)  # 10 min: model download + GPU load
     await _run_warmup()
     _ready = True
     logger.info("server_ready", port=AIP_HTTP_PORT)
@@ -127,9 +172,9 @@ async def shutdown():
 
 @app.get(AIP_HEALTH_ROUTE)
 async def health():
-    if not _ready:
-        return JSONResponse(status_code=503, content={"status": "initializing"})
-    return {"status": "ok"}
+    # Always return 200 so Vertex AI startup probe does not kill the container
+    # while the model is loading.  Include state in the body for observability.
+    return {"status": "ok" if _ready else "initializing"}
 
 
 # ---------------------------------------------------------------------------
