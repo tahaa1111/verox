@@ -75,42 +75,37 @@ async def _launch_vllm() -> None:
     cc = _detect_gpu_compute_capability()
     logger.info("gpu_compute_capability", cc=cc)
 
-    # AWQ CUDA kernels in vLLM require Ampere (sm80+).
-    # P100=sm60, T4=sm75 do NOT support vLLM's AWQ kernels.
-    # On those GPUs skip --quantization awq and use fp16 dequantised weights.
-    ampere_plus = cc >= 8.0
+    # vLLM AWQ support by compute capability:
+    #   sm70+ (Volta/Turing/Ampere/Ada): AutoAWQ kernels work → pass --quantization awq
+    #   sm60  (Pascal / P100): AWQ kernels NOT supported, and the AWQ model checkpoint
+    #         cannot be loaded without quantization handler → fail early with a clear error
+    if cc < 7.0:
+        raise RuntimeError(
+            f"GPU compute capability {cc} (Pascal or older) does not support AWQ. "
+            "Redeploy on T4 (sm7.5) or newer."
+        )
 
-    if ampere_plus:
-        cmd = [
-            sys.executable, "-m", "vllm.entrypoints.openai.api_server",
-            "--model", MODEL_PATH,
-            "--quantization", "awq",
-            "--dtype", "float16",
-            "--gpu-memory-utilization", "0.90",
-            "--max-model-len", "8192",
-            "--max-num-seqs", "16",
-            "--limit-mm-per-prompt", "image=1",
-            "--disable-log-requests",
-            "--served-model-name", VLLM_MODEL_NAME,
-            "--host", "0.0.0.0",
-            "--port", str(VLLM_PORT),
-        ]
-    else:
-        # Older GPU (P100/T4): no AWQ kernels, enforce-eager, smaller context window
-        cmd = [
-            sys.executable, "-m", "vllm.entrypoints.openai.api_server",
-            "--model", MODEL_PATH,
-            "--dtype", "float16",
-            "--gpu-memory-utilization", "0.90",
-            "--max-model-len", "4096",
-            "--max-num-seqs", "4",
-            "--limit-mm-per-prompt", "image=1",
-            "--enforce-eager",
-            "--disable-log-requests",
-            "--served-model-name", VLLM_MODEL_NAME,
-            "--host", "0.0.0.0",
-            "--port", str(VLLM_PORT),
-        ]
+    # On Ampere+ (sm80+) vLLM can additionally use faster Marlin kernels automatically.
+    # For Turing (T4, sm7.5) it falls back to AutoAWQ's reference path — still correct.
+    cmd = [
+        sys.executable, "-m", "vllm.entrypoints.openai.api_server",
+        "--model", MODEL_PATH,
+        "--quantization", "awq",
+        "--dtype", "float16",
+        "--gpu-memory-utilization", "0.90",
+        "--max-model-len", "8192",
+        "--max-num-seqs", "16",
+        "--limit-mm-per-prompt", "image=1",
+        "--disable-log-requests",
+        "--served-model-name", VLLM_MODEL_NAME,
+        "--host", "0.0.0.0",
+        "--port", str(VLLM_PORT),
+    ]
+    # Reduce context window on T4 (16 GB) vs L4/A100 (24 GB+)
+    if cc < 8.0:
+        cmd[cmd.index("8192")] = "4096"
+        cmd[cmd.index("16")] = "8"
+        cmd.append("--enforce-eager")   # disable CUDA graphs on Turing
 
     lora_path = os.getenv("LORA_ADAPTER_PATH", "")
     if lora_path:
