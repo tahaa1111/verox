@@ -9,11 +9,14 @@ from celery import Celery
 _broker = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 _backend = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
 
-# Redis AUTH string support
+# Redis AUTH string support — inject only if the URL does not already carry auth
 _auth = os.getenv("REDIS_AUTH_STRING", "")
 if _auth:
-    _broker = _broker.replace("redis://", f"redis://:{_auth}@")
-    _backend = _backend.replace("redis://", f"redis://:{_auth}@")
+    # "redis://host" has no "@"; "redis://:pass@host" already has it — don't double
+    if "@" not in _broker.split("://", 1)[-1]:
+        _broker = _broker.replace("redis://", f"redis://:{_auth}@")
+    if "@" not in _backend.split("://", 1)[-1]:
+        _backend = _backend.replace("redis://", f"redis://:{_auth}@")
 
 app = Celery("medibox", broker=_broker, backend=_backend)
 
