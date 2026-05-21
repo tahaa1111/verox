@@ -19,13 +19,14 @@ def upgrade() -> None:
     # jobs
     op.create_table(
         "jobs",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("uuid_generate_v4()")),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("session_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("device_id", sa.Text(), nullable=False),
         sa.Column("user_uid", sa.Text(), nullable=False),
         sa.Column("status", sa.Text(), nullable=False, server_default="queued"),
         sa.Column("crop_count", sa.SmallInteger(), nullable=False, server_default="0"),
-        sa.Column("minio_prefix", sa.Text()),
+        sa.Column("gcs_prefix", sa.Text()),
+        sa.Column("vertex_prediction_id", sa.Text()),
         sa.Column("result", postgresql.JSONB()),
         sa.Column("result_schema_version", sa.Text(), server_default="1.0"),
         sa.Column("error_message", sa.Text()),
@@ -50,7 +51,7 @@ def upgrade() -> None:
     # corrections
     op.create_table(
         "corrections",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("uuid_generate_v4()")),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("job_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False),
         sa.Column("user_uid", sa.Text(), nullable=False),
         sa.Column("corrected_data", postgresql.JSONB(), nullable=False),
