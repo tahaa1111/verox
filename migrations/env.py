@@ -24,11 +24,15 @@ target_metadata = Base.metadata
 
 # Override sqlalchemy.url from env vars so secrets never touch alembic.ini
 def get_url() -> str:
-    return (
-        f"postgresql+asyncpg://{os.environ['DB_USER']}:{os.environ['DB_PASSWORD']}"
-        f"@{os.environ.get('DB_HOST','postgres')}:{os.environ.get('DB_PORT','5432')}"
-        f"/{os.environ.get('DB_NAME','medibox')}"
-    )
+    user = os.environ["DB_USER"]
+    password = os.environ["DB_PASSWORD"]
+    host = os.environ.get("DB_HOST", "127.0.0.1")
+    port = os.environ.get("DB_PORT", "5432")
+    name = os.environ.get("DB_NAME", "medibox")
+    if host.startswith("/"):
+        # Cloud SQL Auth Proxy Unix socket — must use ?host= query param
+        return f"postgresql+asyncpg://{user}:{password}@/{name}?host={host}"
+    return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{name}"
 
 
 def run_migrations_offline() -> None:
