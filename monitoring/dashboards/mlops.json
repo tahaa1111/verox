@@ -1,0 +1,229 @@
+{
+  "displayName": "Medibox — MLOps Pipeline",
+  "mosaicLayout": {
+    "columns": 12,
+    "tiles": [
+      {
+        "width": 6,
+        "height": 3,
+        "widget": {
+          "title": "Vertex AI Pipeline — Run Duration (minutes)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"aiplatform.googleapis.com/pipeline_job/run_time\" resource.type=\"aiplatform.googleapis.com/PipelineJob\"",
+                    "aggregation": {
+                      "alignmentPeriod": "3600s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN"
+                    }
+                  }
+                },
+                "plotType": "STACKED_BAR",
+                "legendTemplate": "Pipeline run duration"
+              }
+            ],
+            "yAxis": {"label": "minutes", "scale": "LINEAR"}
+          }
+        }
+      },
+      {
+        "xPos": 6,
+        "width": 6,
+        "height": 3,
+        "widget": {
+          "title": "QLoRA Training Job GPU Utilization (%)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"aiplatform.googleapis.com/training/accelerator/duty_cycle\" resource.type=\"aiplatform.googleapis.com/CustomJob\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "GPU duty cycle %"
+              }
+            ],
+            "yAxis": {"label": "%", "scale": "LINEAR"}
+          }
+        }
+      },
+      {
+        "yPos": 3,
+        "width": 4,
+        "height": 3,
+        "widget": {
+          "title": "Eval: drug_f1 per run",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"logging.googleapis.com/user/medibox_eval_drug_f1\" resource.type=\"cloud_run_revision\"",
+                    "aggregation": {
+                      "alignmentPeriod": "86400s",
+                      "perSeriesAligner": "ALIGN_MAX",
+                      "crossSeriesReducer": "REDUCE_MAX"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "drug_f1"
+              }
+            ],
+            "thresholds": [{"value": 0.80, "color": "RED", "direction": "BELOW", "label": "Fail threshold 0.80"}],
+            "yAxis": {"label": "F1 score", "scale": "LINEAR"}
+          }
+        }
+      },
+      {
+        "xPos": 4,
+        "yPos": 3,
+        "width": 4,
+        "height": 3,
+        "widget": {
+          "title": "Eval: json_validity_rate per run",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"logging.googleapis.com/user/medibox_eval_json_validity\" resource.type=\"cloud_run_revision\"",
+                    "aggregation": {
+                      "alignmentPeriod": "86400s",
+                      "perSeriesAligner": "ALIGN_MAX",
+                      "crossSeriesReducer": "REDUCE_MAX"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "json_validity_rate"
+              }
+            ],
+            "thresholds": [{"value": 0.995, "color": "RED", "direction": "BELOW", "label": "Fail threshold 0.995"}],
+            "yAxis": {"label": "rate", "scale": "LINEAR"}
+          }
+        }
+      },
+      {
+        "xPos": 8,
+        "yPos": 3,
+        "width": 4,
+        "height": 3,
+        "widget": {
+          "title": "Eval: rare_drug_accuracy per run",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"logging.googleapis.com/user/medibox_eval_rare_drug_acc\" resource.type=\"cloud_run_revision\"",
+                    "aggregation": {
+                      "alignmentPeriod": "86400s",
+                      "perSeriesAligner": "ALIGN_MAX",
+                      "crossSeriesReducer": "REDUCE_MAX"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "rare_drug_accuracy"
+              }
+            ],
+            "yAxis": {"label": "accuracy", "scale": "LINEAR"}
+          }
+        }
+      },
+      {
+        "yPos": 6,
+        "width": 6,
+        "height": 3,
+        "widget": {
+          "title": "Vertex AI Model Registry — Models Uploaded (cumulative)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"aiplatform.googleapis.com/model/online_serving_info/deployed_model_count\" resource.type=\"aiplatform.googleapis.com/Endpoint\"",
+                    "aggregation": {
+                      "alignmentPeriod": "3600s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "Deployed model versions"
+              }
+            ],
+            "yAxis": {"label": "count", "scale": "LINEAR"}
+          }
+        }
+      },
+      {
+        "xPos": 6,
+        "yPos": 6,
+        "width": 6,
+        "height": 3,
+        "widget": {
+          "title": "Canary Traffic Split (new model %)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"aiplatform.googleapis.com/prediction/online/model_serving_info\" resource.type=\"aiplatform.googleapis.com/Endpoint\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "groupByFields": ["metric.label.model_id"]
+                    }
+                  }
+                },
+                "plotType": "STACKED_AREA",
+                "legendTemplate": "Traffic % by model"
+              }
+            ],
+            "yAxis": {"label": "%", "scale": "LINEAR"}
+          }
+        }
+      },
+      {
+        "yPos": 9,
+        "width": 12,
+        "height": 3,
+        "widget": {
+          "title": "Training Data Volume — Correction Samples Ingested per Day",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"logging.googleapis.com/user/medibox_correction_count\" resource.type=\"cloud_run_revision\"",
+                    "aggregation": {
+                      "alignmentPeriod": "86400s",
+                      "perSeriesAligner": "ALIGN_SUM",
+                      "crossSeriesReducer": "REDUCE_SUM"
+                    }
+                  }
+                },
+                "plotType": "STACKED_BAR",
+                "legendTemplate": "Daily corrections (training data)"
+              }
+            ],
+            "yAxis": {"label": "count", "scale": "LINEAR"}
+          }
+        }
+      }
+    ]
+  }
+}

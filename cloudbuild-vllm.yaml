@@ -1,0 +1,47 @@
+# =============================================================================
+# Cloud Build — vLLM container rebuild + Vertex AI deployment
+# Triggered manually OR on push to paths matching services/vllm/**
+# This is separate because rebuilding the VLM image takes 20-40 min.
+# =============================================================================
+
+substitutions:
+  _REGION: us-central1
+  _REPO: medibox-repo
+  _MODEL_GCS: ""   # set to gs://${PROJECT_ID}-models/vN/ if using pre-downloaded weights
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_32   # fast build for large image
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: build-vllm
+    args:
+      - build
+      - -f
+      - services/vllm/Dockerfile
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:$SHORT_SHA
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:latest
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    id: push-vllm
+    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:$SHORT_SHA"]
+    waitFor: [build-vllm]
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-vllm-endpoint
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        export TAG=$SHORT_SHA
+        export IMAGE="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:$SHORT_SHA"
+        export MODEL_GCS="${_MODEL_GCS}"
+        bash scripts/03_deploy_vllm_endpoint.sh
+    waitFor: [push-vllm]
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:$SHORT_SHA

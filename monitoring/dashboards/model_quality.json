@@ -1,0 +1,253 @@
+{
+  "displayName": "Medibox — Model Quality",
+  "mosaicLayout": {
+    "columns": 12,
+    "tiles": [
+      {
+        "width": 4,
+        "height": 3,
+        "widget": {
+          "title": "Average Confidence Score",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"logging.googleapis.com/user/medibox_confidence_score\" resource.type=\"cloud_run_revision\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "Avg confidence"
+              }
+            ],
+            "yAxis": {"label": "score [0-1]", "scale": "LINEAR"}
+          }
+        }
+      },
+      {
+        "xPos": 4,
+        "width": 4,
+        "height": 3,
+        "widget": {
+          "title": "Low-Confidence Jobs (< 0.5) Rate",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"logging.googleapis.com/user/medibox_low_confidence_count\" resource.type=\"cloud_run_revision\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_RATE",
+                      "crossSeriesReducer": "REDUCE_SUM"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "Low-confidence jobs/s"
+              }
+            ],
+            "yAxis": {"label": "jobs/s", "scale": "LINEAR"}
+          }
+        }
+      },
+      {
+        "xPos": 8,
+        "width": 4,
+        "height": 3,
+        "widget": {
+          "title": "Formulary Miss Rate",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"logging.googleapis.com/user/medibox_formulary_miss_count\" resource.type=\"cloud_run_revision\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_RATE",
+                      "crossSeriesReducer": "REDUCE_SUM"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "Formulary misses/s"
+              }
+            ],
+            "yAxis": {"label": "misses/s", "scale": "LINEAR"}
+          }
+        }
+      },
+      {
+        "yPos": 3,
+        "width": 6,
+        "height": 3,
+        "widget": {
+          "title": "Correction Rate (pharmacist overrides / jobs)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"logging.googleapis.com/user/medibox_correction_count\" resource.type=\"cloud_run_revision\"",
+                    "aggregation": {
+                      "alignmentPeriod": "3600s",
+                      "perSeriesAligner": "ALIGN_SUM",
+                      "crossSeriesReducer": "REDUCE_SUM"
+                    }
+                  }
+                },
+                "plotType": "STACKED_BAR",
+                "legendTemplate": "Corrections/hr"
+              }
+            ],
+            "yAxis": {"label": "corrections", "scale": "LINEAR"}
+          }
+        }
+      },
+      {
+        "xPos": 6,
+        "yPos": 3,
+        "width": 6,
+        "height": 3,
+        "widget": {
+          "title": "JSON Parse Failures (malformed LLM output)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"logging.googleapis.com/user/medibox_json_repair_count\" resource.type=\"cloud_run_revision\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_RATE",
+                      "crossSeriesReducer": "REDUCE_SUM"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "JSON repair events/s"
+              }
+            ],
+            "yAxis": {"label": "events/s", "scale": "LINEAR"}
+          }
+        }
+      },
+      {
+        "yPos": 6,
+        "width": 12,
+        "height": 3,
+        "widget": {
+          "title": "Hallucination Rate (unmatched drug names after normalization)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"logging.googleapis.com/user/medibox_hallucination_count\" resource.type=\"cloud_run_revision\"",
+                    "aggregation": {
+                      "alignmentPeriod": "3600s",
+                      "perSeriesAligner": "ALIGN_SUM",
+                      "crossSeriesReducer": "REDUCE_SUM"
+                    }
+                  }
+                },
+                "plotType": "STACKED_BAR",
+                "legendTemplate": "Hallucinations/hr"
+              }
+            ],
+            "yAxis": {"label": "count", "scale": "LINEAR"}
+          }
+        }
+      },
+      {
+        "yPos": 9,
+        "width": 4,
+        "height": 3,
+        "widget": {
+          "title": "Review Queue Size (jobs pending pharmacist review)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"logging.googleapis.com/user/medibox_review_queue_size\" resource.type=\"cloud_run_revision\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MAX"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "Review queue"
+              }
+            ],
+            "yAxis": {"label": "jobs", "scale": "LINEAR"}
+          }
+        }
+      },
+      {
+        "xPos": 4,
+        "yPos": 9,
+        "width": 4,
+        "height": 3,
+        "widget": {
+          "title": "Drug Name Normalization Hit Rate (%)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"logging.googleapis.com/user/medibox_drug_normalize_hit_rate\" resource.type=\"cloud_run_revision\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_MEAN"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "Normalize hit rate %"
+              }
+            ],
+            "yAxis": {"label": "%", "scale": "LINEAR"}
+          }
+        }
+      },
+      {
+        "xPos": 8,
+        "yPos": 9,
+        "width": 4,
+        "height": 3,
+        "widget": {
+          "title": "Grid Composition Time (ms)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "metric.type=\"logging.googleapis.com/user/medibox_grid_compose_ms\" resource.type=\"cloud_run_revision\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95"
+                    }
+                  }
+                },
+                "plotType": "LINE",
+                "legendTemplate": "Grid compose p95 ms"
+              }
+            ],
+            "yAxis": {"label": "ms", "scale": "LINEAR"}
+          }
+        }
+      }
+    ]
+  }
+}

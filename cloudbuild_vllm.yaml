@@ -1,0 +1,37 @@
+# =============================================================================
+# Cloud Build — vLLM container only
+# Builds and pushes the Vertex AI custom container for Qwen2.5-VL-7B-AWQ.
+# Run: gcloud builds submit --config=cloudbuild_vllm.yaml
+# =============================================================================
+substitutions:
+  _REGION: us-central1
+  _REPO: medibox-repo
+  _IMAGE_TAG: latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: build-vllm
+    args:
+      - build
+      - -f
+      - services/vllm/Dockerfile
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:${_IMAGE_TAG}
+      - .
+    timeout: 1800s
+
+  - name: gcr.io/cloud-builders/docker
+    id: push-vllm
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:${_IMAGE_TAG}
+    waitFor: [build-vllm]
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:${_IMAGE_TAG}
+
+timeout: 2400s

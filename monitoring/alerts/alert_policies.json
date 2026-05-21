@@ -1,0 +1,332 @@
+[
+  {
+    "displayName": "Medibox: API p95 Latency > 1s",
+    "documentation": {
+      "content": "API p95 latency has exceeded 1 second for 2 consecutive minutes.\n\n**Runbook**: Check Cloud Run instance count, Vertex AI endpoint latency, Celery queue depth.\nVerify Cloud SQL connection count is below 25 (R-15).\nIf Vertex endpoint is saturated, check GPU duty cycle dashboard.",
+      "mimeType": "text/markdown"
+    },
+    "conditions": [
+      {
+        "displayName": "API p95 latency > 1000ms",
+        "conditionThreshold": {
+          "filter": "metric.type=\"run.googleapis.com/request_latencies\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"medibox-api\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "60s",
+              "perSeriesAligner": "ALIGN_DELTA",
+              "crossSeriesReducer": "REDUCE_PERCENTILE_95"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 1000,
+          "duration": "120s",
+          "trigger": {"count": 1}
+        }
+      }
+    ],
+    "alertStrategy": {
+      "autoClose": "604800s",
+      "notificationRateLimit": {"period": "300s"}
+    },
+    "combiner": "OR",
+    "enabled": true,
+    "severity": "WARNING"
+  },
+  {
+    "displayName": "Medibox: API Error Rate > 2%",
+    "documentation": {
+      "content": "5xx error rate has exceeded 2% for 3 consecutive minutes.\n\n**Runbook**: Check Cloud Run logs for tracebacks. Check Cloud SQL health.\nVerify Vertex AI endpoint is responding. Check for OOM kills in worker.\nLook for recent deployments in Cloud Build history.",
+      "mimeType": "text/markdown"
+    },
+    "conditions": [
+      {
+        "displayName": "5xx error rate > 2%",
+        "conditionThreshold": {
+          "filter": "metric.type=\"run.googleapis.com/request_count\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"medibox-api\" metric.label.\"response_code_class\"=\"5xx\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "60s",
+              "perSeriesAligner": "ALIGN_RATE",
+              "crossSeriesReducer": "REDUCE_SUM"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 0.02,
+          "duration": "180s",
+          "trigger": {"count": 1}
+        }
+      }
+    ],
+    "alertStrategy": {
+      "autoClose": "604800s",
+      "notificationRateLimit": {"period": "300s"}
+    },
+    "combiner": "OR",
+    "enabled": true,
+    "severity": "CRITICAL"
+  },
+  {
+    "displayName": "Medibox: Vertex AI GPU Duty Cycle > 90%",
+    "documentation": {
+      "content": "Vertex AI endpoint GPU duty cycle exceeded 90% for 5 consecutive minutes.\nThis indicates the endpoint is saturated and latency will degrade.\n\n**Runbook**: Check if canary or shadow eval is running concurrently with production traffic.\nConsider scaling up min-replica-count via `gcloud ai endpoints deploy-model`.\nDD-001: T4 cannot scale to zero — adding replicas adds ~$252/month each.",
+      "mimeType": "text/markdown"
+    },
+    "conditions": [
+      {
+        "displayName": "GPU duty cycle > 90%",
+        "conditionThreshold": {
+          "filter": "metric.type=\"aiplatform.googleapis.com/prediction/online/accelerator/duty_cycle\" resource.type=\"aiplatform.googleapis.com/Endpoint\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "60s",
+              "perSeriesAligner": "ALIGN_MEAN",
+              "crossSeriesReducer": "REDUCE_MEAN"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 90,
+          "duration": "300s",
+          "trigger": {"count": 1}
+        }
+      }
+    ],
+    "alertStrategy": {
+      "autoClose": "604800s",
+      "notificationRateLimit": {"period": "600s"}
+    },
+    "combiner": "OR",
+    "enabled": true,
+    "severity": "WARNING"
+  },
+  {
+    "displayName": "Medibox: Celery Queue Depth > 100",
+    "documentation": {
+      "content": "The Celery inference queue has more than 100 pending jobs.\nAt current throughput this represents >10 minutes of backlog.\n\n**Runbook**: Check worker Cloud Run instance count (max=5, concurrency=1).\nVerify Vertex AI endpoint is healthy. Check for stuck tasks with:\n  `celery -A src.worker.celery_app inspect active`\nIf worker is OOM-killed, check Cloud Run memory metrics.",
+      "mimeType": "text/markdown"
+    },
+    "conditions": [
+      {
+        "displayName": "Redis ops rate spike (queue depth proxy)",
+        "conditionThreshold": {
+          "filter": "metric.type=\"redis.googleapis.com/stats/connected_clients\" resource.type=\"redis_instance\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "60s",
+              "perSeriesAligner": "ALIGN_MEAN",
+              "crossSeriesReducer": "REDUCE_MAX"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 50,
+          "duration": "300s",
+          "trigger": {"count": 1}
+        }
+      }
+    ],
+    "alertStrategy": {
+      "autoClose": "604800s",
+      "notificationRateLimit": {"period": "300s"}
+    },
+    "combiner": "OR",
+    "enabled": true,
+    "severity": "WARNING"
+  },
+  {
+    "displayName": "Medibox: Cloud SQL CPU > 80%",
+    "documentation": {
+      "content": "Cloud SQL (db-f1-micro) CPU utilization exceeded 80% for 5 minutes.\nThis instance has limited CPU and shares it with background autovacuum.\n\n**Runbook**: Check for long-running queries via pg_stat_activity.\nVerify connection count is below 25 (max for db-f1-micro, see R-15).\nCheck if a retrain pipeline is running concurrent heavy queries against BigQuery instead.",
+      "mimeType": "text/markdown"
+    },
+    "conditions": [
+      {
+        "displayName": "Cloud SQL CPU > 80%",
+        "conditionThreshold": {
+          "filter": "metric.type=\"cloudsql.googleapis.com/database/cpu/utilization\" resource.type=\"cloudsql_database\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "60s",
+              "perSeriesAligner": "ALIGN_MEAN",
+              "crossSeriesReducer": "REDUCE_MAX"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 0.80,
+          "duration": "300s",
+          "trigger": {"count": 1}
+        }
+      }
+    ],
+    "alertStrategy": {
+      "autoClose": "604800s",
+      "notificationRateLimit": {"period": "600s"}
+    },
+    "combiner": "OR",
+    "enabled": true,
+    "severity": "WARNING"
+  },
+  {
+    "displayName": "Medibox: Cloud SQL Active Connections > 20",
+    "documentation": {
+      "content": "Cloud SQL active connections exceeded 20. The db-f1-micro limit is 25.\nAt max Cloud Run scale (5 instances × pool_size=2 + max_overflow=1 = 15 max), this should not trigger unless something is leaking connections.\n\n**Runbook**: Check for connection leaks via pg_stat_activity.\nVerify Cloud Run max-instances is 5 (R-15 mitigation).\nIf approaching 25, roll out an emergency max-instances reduction:\n  `gcloud run services update medibox-api --max-instances=3`",
+      "mimeType": "text/markdown"
+    },
+    "conditions": [
+      {
+        "displayName": "Postgres backends > 20",
+        "conditionThreshold": {
+          "filter": "metric.type=\"cloudsql.googleapis.com/database/postgresql/num_backends\" resource.type=\"cloudsql_database\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "60s",
+              "perSeriesAligner": "ALIGN_MEAN",
+              "crossSeriesReducer": "REDUCE_MAX"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 20,
+          "duration": "120s",
+          "trigger": {"count": 1}
+        }
+      }
+    ],
+    "alertStrategy": {
+      "autoClose": "604800s",
+      "notificationRateLimit": {"period": "300s"}
+    },
+    "combiner": "OR",
+    "enabled": true,
+    "severity": "CRITICAL"
+  },
+  {
+    "displayName": "Medibox: Hallucination Rate Spike",
+    "documentation": {
+      "content": "Drug hallucination rate (unmatched names after RapidFuzz normalization) has spiked above baseline.\nThis may indicate model regression after a retrain, or a change in prescription image quality.\n\n**Runbook**: Check if a new model version was recently deployed (canary or promote).\nCompare drug_f1 eval metrics in the MLOps dashboard.\nIf confirmed regression, roll back via:\n  POST /v1/admin/model/rollback with the previous deployed_model_id.\nReview BigQuery feedback table for affected device_ids.",
+      "mimeType": "text/markdown"
+    },
+    "conditions": [
+      {
+        "displayName": "Hallucination log count spike",
+        "conditionThreshold": {
+          "filter": "metric.type=\"logging.googleapis.com/user/medibox_hallucination_count\" resource.type=\"cloud_run_revision\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "300s",
+              "perSeriesAligner": "ALIGN_RATE",
+              "crossSeriesReducer": "REDUCE_SUM"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 0.1,
+          "duration": "300s",
+          "trigger": {"count": 1}
+        }
+      }
+    ],
+    "alertStrategy": {
+      "autoClose": "604800s",
+      "notificationRateLimit": {"period": "600s"}
+    },
+    "combiner": "OR",
+    "enabled": true,
+    "severity": "WARNING"
+  },
+  {
+    "displayName": "Medibox: Vertex Endpoint Unreachable (health check failed)",
+    "documentation": {
+      "content": "The Vertex AI endpoint health check has failed for more than 3 minutes.\nThis will cause all inference jobs to fail.\n\n**Runbook**: Check Vertex AI Endpoints console for deployment status.\nVerify the vLLM container started successfully (model download from GCS can take 10-15min on cold start).\nCheck Cloud Logging for the endpoint's container logs.\nIf endpoint is in error state, redeploy via:\n  `bash scripts/03_deploy_vllm_endpoint.sh`",
+      "mimeType": "text/markdown"
+    },
+    "conditions": [
+      {
+        "displayName": "Vertex prediction request error rate",
+        "conditionThreshold": {
+          "filter": "metric.type=\"aiplatform.googleapis.com/prediction/online/error_count\" resource.type=\"aiplatform.googleapis.com/Endpoint\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "60s",
+              "perSeriesAligner": "ALIGN_RATE",
+              "crossSeriesReducer": "REDUCE_SUM"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 0.5,
+          "duration": "180s",
+          "trigger": {"count": 1}
+        }
+      }
+    ],
+    "alertStrategy": {
+      "autoClose": "604800s",
+      "notificationRateLimit": {"period": "300s"}
+    },
+    "combiner": "OR",
+    "enabled": true,
+    "severity": "CRITICAL"
+  },
+  {
+    "displayName": "Medibox: Monthly Budget > $400",
+    "documentation": {
+      "content": "Monthly GCP spend has exceeded $400. Budget thresholds:\n- $250: normal (Vertex floor, idle)\n- $350: above idle baseline\n- $400: THIS ALERT — investigate unexpected cost drivers\n- $500: auto-pause Vertex endpoint (configured in billing budget Pub/Sub)\n\n**Runbook**: Check Cost dashboard for which service is driving cost.\nVertex AI endpoint replica count is the primary variable cost.\nRun `scripts/pause_endpoint.sh` if not actively serving pharmacies.",
+      "mimeType": "text/markdown"
+    },
+    "conditions": [
+      {
+        "displayName": "Budget threshold exceeded",
+        "conditionThreshold": {
+          "filter": "metric.type=\"billing.googleapis.com/billing/monthly_cost\" resource.type=\"global\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "86400s",
+              "perSeriesAligner": "ALIGN_MAX",
+              "crossSeriesReducer": "REDUCE_MAX"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 400,
+          "duration": "0s",
+          "trigger": {"count": 1}
+        }
+      }
+    ],
+    "alertStrategy": {
+      "autoClose": "2592000s",
+      "notificationRateLimit": {"period": "86400s"}
+    },
+    "combiner": "OR",
+    "enabled": true,
+    "severity": "WARNING"
+  },
+  {
+    "displayName": "Medibox: Admin Audit Log Writes Stopped",
+    "documentation": {
+      "content": "No audit_log writes detected in the past 24 hours while the system is active.\nThis may indicate the audit middleware is broken, which is a compliance violation.\n\n**Runbook**: Verify the audit_log table is receiving rows:\n  `SELECT COUNT(*), MAX(created_at) FROM audit_log WHERE created_at > NOW() - INTERVAL '24 hours'`\nCheck Cloud Run API logs for audit write errors.\nAll admin actions and job submissions must be logged (Loi n°2004-63 compliance).",
+      "mimeType": "text/markdown"
+    },
+    "conditions": [
+      {
+        "displayName": "Audit log write rate drops to zero",
+        "conditionThreshold": {
+          "filter": "metric.type=\"logging.googleapis.com/user/medibox_audit_write_count\" resource.type=\"cloud_run_revision\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "3600s",
+              "perSeriesAligner": "ALIGN_SUM",
+              "crossSeriesReducer": "REDUCE_SUM"
+            }
+          ],
+          "comparison": "COMPARISON_LT",
+          "thresholdValue": 1,
+          "duration": "7200s",
+          "trigger": {"count": 1}
+        }
+      }
+    ],
+    "alertStrategy": {
+      "autoClose": "604800s",
+      "notificationRateLimit": {"period": "3600s"}
+    },
+    "combiner": "OR",
+    "enabled": true,
+    "severity": "WARNING"
+  }
+]
