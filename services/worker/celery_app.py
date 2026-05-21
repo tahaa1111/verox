@@ -24,6 +24,7 @@ app.conf.update(
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
+    broker_connection_retry_on_startup=True,
     timezone="Africa/Tunis",
     enable_utc=True,
     # GPU jobs must not be prefetched — one task per worker at a time
