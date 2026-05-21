@@ -50,8 +50,11 @@ def do_run_migrations(connection):
 
 
 async def run_async_migrations() -> None:
+    # Set the URL in the config object FIRST so ConfigParser never attempts
+    # to interpolate the %(VAR)s placeholder that lives in alembic.ini.
+    config.set_main_option("sqlalchemy.url", get_url())
     cfg = config.get_section(config.config_ini_section, {})
-    cfg["sqlalchemy.url"] = get_url()
+    cfg["sqlalchemy.url"] = get_url()  # belt-and-suspenders override
     connectable = async_engine_from_config(
         cfg, prefix="sqlalchemy.", poolclass=pool.NullPool
     )
