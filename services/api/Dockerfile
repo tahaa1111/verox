@@ -26,6 +26,7 @@ COPY services/worker/utils/grid_composer.py /app/services/worker/utils/grid_comp
 COPY services/worker/utils/__init__.py /app/services/worker/utils/__init__.py
 COPY services/worker/__init__.py /app/services/worker/__init__.py
 COPY referances/ /app/referances/
+COPY migrations/ /app/migrations/
 
 # Non-root user
 RUN addgroup --gid 1001 appgroup && adduser --uid 1001 --gid 1001 --no-create-home appuser

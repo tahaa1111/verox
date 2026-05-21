@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 
 from services.api.core.config import get_settings
 from services.api.core.telemetry import configure_metrics, configure_telemetry
-from services.api.routers import admin, corrections, results, submit
+from services.api.routers import admin, camera, corrections, results, submit
 from services.api.ws.manager import ws_manager
 
 settings = get_settings()
@@ -67,6 +67,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         f"https://{settings.domain}",
+        "https://medibox-frontend-5w7o5tyr2q-uc.a.run.app",
         "http://localhost:5173",
         "http://localhost:3000",
     ],
@@ -105,6 +106,7 @@ app.include_router(submit.router, prefix="/v1", tags=["Inference"])
 app.include_router(results.router, prefix="/v1", tags=["Results"])
 app.include_router(admin.router, prefix="/v1", tags=["Admin"])
 app.include_router(corrections.router, prefix="/v1", tags=["Corrections"])
+app.include_router(camera.router, prefix="/v1", tags=["Camera"])
 
 
 @app.get("/v1/healthz", tags=["Health"], include_in_schema=False)

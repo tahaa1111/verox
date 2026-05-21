@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import clsx from "clsx";
 
 const links = [
+  { to: "/camera", label: "Camera" },
   { to: "/submit", label: "Submit" },
   { to: "/admin", label: "Admin" },
 ];

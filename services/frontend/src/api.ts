@@ -50,3 +50,13 @@ export async function rollbackModel(deployedModelId: string): Promise<void> {
 export async function setMaintenance(active: boolean, reason: string): Promise<void> {
   await http.post("/admin/maintenance", { active, reason });
 }
+
+export async function getCameraSnapshot(deviceId = "pi-0001"): Promise<{ frame: string }> {
+  const { data } = await http.get<{ frame: string }>(`/camera/snapshot?device_id=${deviceId}`);
+  return data;
+}
+
+export async function submitCapture(deviceId = "pi-0001"): Promise<SubmitResponse> {
+  const { data } = await http.post<SubmitResponse>(`/camera/capture?device_id=${deviceId}`);
+  return data;
+}

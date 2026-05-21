@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/1"
 
+    # Camera relay
+    camera_secret: str = "medibox-camera-dev-secret"  # override via CAMERA_SECRET env var
+
     # Rate limiting
     rate_limit_per_device: int = 60     # requests per minute
     rate_limit_burst: int = 10

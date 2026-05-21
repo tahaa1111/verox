@@ -4,6 +4,7 @@ import { SubmitPage } from "./pages/SubmitPage";
 import { JobTrackerPage } from "./pages/JobTrackerPage";
 import { CorrectionsPage } from "./pages/CorrectionsPage";
 import { AdminPage } from "./pages/AdminPage";
+import { CameraPage } from "./pages/CameraPage";
 import { NavBar } from "./components/NavBar";
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
             <Route path="/jobs/:jobId" element={<JobTrackerPage />} />
             <Route path="/corrections/:jobId" element={<CorrectionsPage />} />
             <Route path="/admin" element={<AdminPage />} />
+            <Route path="/camera" element={<CameraPage />} />
           </Routes>
         </main>
       </div>
