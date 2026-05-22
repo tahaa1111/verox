@@ -4,6 +4,13 @@ Exposes:
   POST $AIP_PREDICT_ROUTE (/predict) — Vertex AI contract
   POST /v1/chat/completions       — OpenAI-compatible (local dev)
   GET  $AIP_HEALTH_ROUTE  (/health)
+
+Startup strategy (critical for Vertex AI):
+  Model loading runs in a background asyncio.Task so the HTTP server
+  is alive and returning 200 on /health from the very first request.
+  This prevents Vertex AI's startup health probe from timing out and
+  killing the container before the GPU model is loaded.
+  /predict returns 503 until _ready=True.
 """
 
 from __future__ import annotations
@@ -13,6 +20,7 @@ import os
 import subprocess
 import sys
 import time
+from contextlib import asynccontextmanager
 
 import httpx
 import structlog
@@ -29,22 +37,25 @@ AIP_STORAGE_URI = os.getenv("AIP_STORAGE_URI", "")  # GCS path to model artifact
 
 VLLM_PORT = 8000
 VLLM_URL = f"http://localhost:{VLLM_PORT}"
-MODEL_PATH = os.getenv("MODEL_PATH", "/models/qwen2.5-vl-7b-awq")
+# MODEL_PATH can be:
+#   - A local filesystem path: /models/qwen2.5-vl-7b-awq
+#   - A HuggingFace Hub repo ID: Qwen/Qwen2.5-VL-7B-Instruct-AWQ
+#     (vLLM auto-downloads from HF Hub if the path doesn't exist locally)
+MODEL_PATH = os.getenv("MODEL_PATH", "Qwen/Qwen2.5-VL-7B-Instruct-AWQ")
 VLLM_MODEL_NAME = "qwen2.5-vl-7b-awq"
 
 _vllm_proc: subprocess.Popen | None = None
 _ready = False
-
-app = FastAPI(title="Medibox vLLM Vertex Server", docs_url=None, redoc_url=None)
+_load_error: str | None = None
 
 
 # ---------------------------------------------------------------------------
-# Startup: download model from GCS, launch vLLM, warmup
+# Model loading helpers
 # ---------------------------------------------------------------------------
 
 async def _download_model_from_gcs(gcs_uri: str, local_path: str) -> None:
     if not gcs_uri:
-        logger.info("no_gcs_uri_using_local_model")
+        logger.info("no_gcs_uri_skipping_download")
         return
     logger.info("downloading_model", gcs_uri=gcs_uri, local_path=local_path)
     proc = await asyncio.create_subprocess_exec(
@@ -77,16 +88,13 @@ async def _launch_vllm() -> None:
 
     # vLLM AWQ support by compute capability:
     #   sm70+ (Volta/Turing/Ampere/Ada): AutoAWQ kernels work → pass --quantization awq
-    #   sm60  (Pascal / P100): AWQ kernels NOT supported, and the AWQ model checkpoint
-    #         cannot be loaded without quantization handler → fail early with a clear error
+    #   sm60  (Pascal / P100): AWQ kernels NOT supported — fail early with clear message
     if cc < 7.0:
         raise RuntimeError(
             f"GPU compute capability {cc} (Pascal or older) does not support AWQ. "
             "Redeploy on T4 (sm7.5) or newer."
         )
 
-    # On Ampere+ (sm80+) vLLM can additionally use faster Marlin kernels automatically.
-    # For Turing (T4, sm7.5) it falls back to AutoAWQ's reference path — still correct.
     cmd = [
         sys.executable, "-m", "vllm.entrypoints.openai.api_server",
         "--model", MODEL_PATH,
@@ -101,20 +109,22 @@ async def _launch_vllm() -> None:
         "--host", "0.0.0.0",
         "--port", str(VLLM_PORT),
     ]
-    # Reduce context window on T4 (16 GB) vs L4/A100 (24 GB+)
+    # T4 (sm75): smaller context + eager mode (no CUDA graphs) to fit in 16 GB
     if cc < 8.0:
         cmd[cmd.index("8192")] = "4096"
         cmd[cmd.index("16")] = "8"
-        cmd.append("--enforce-eager")   # disable CUDA graphs on Turing
+        cmd.append("--enforce-eager")
 
     lora_path = os.getenv("LORA_ADAPTER_PATH", "")
     if lora_path:
         cmd += ["--enable-lora", "--lora-modules", f"medibox-adapter={lora_path}"]
+
     logger.info("launching_vllm", cmd=" ".join(cmd))
     _vllm_proc = subprocess.Popen(cmd)
 
 
-async def _wait_for_vllm(timeout: int = 300) -> None:
+async def _wait_for_vllm(timeout: int = 1800) -> None:
+    """Poll vLLM /health until it responds 200. Timeout: 30 min (HF download + load)."""
     deadline = time.time() + timeout
     async with httpx.AsyncClient() as client:
         while time.time() < deadline:
@@ -131,8 +141,8 @@ async def _wait_for_vllm(timeout: int = 300) -> None:
                     return
             except Exception:
                 pass
-            await asyncio.sleep(5)
-    raise TimeoutError("vLLM did not become ready within timeout")
+            await asyncio.sleep(10)
+    raise TimeoutError(f"vLLM did not become ready within {timeout}s timeout")
 
 
 async def _run_warmup() -> None:
@@ -143,32 +153,60 @@ async def _run_warmup() -> None:
         logger.warning("warmup_failed_non_fatal", exc=str(exc))
 
 
-@app.on_event("startup")
-async def startup():
-    global _ready
-    if AIP_STORAGE_URI:
-        await _download_model_from_gcs(AIP_STORAGE_URI, MODEL_PATH)
-    await _launch_vllm()
-    await _wait_for_vllm(timeout=600)  # 10 min: model download + GPU load
-    await _run_warmup()
-    _ready = True
-    logger.info("server_ready", port=AIP_HTTP_PORT)
+async def _load_model_background() -> None:
+    """
+    Background task: download model (if GCS URI set), launch vLLM, wait for
+    it to be ready, then run warmup. Sets _ready=True on success.
+    Any exception is caught and stored in _load_error for observability.
+    The HTTP server (including /health) stays alive throughout.
+    """
+    global _ready, _load_error
+    try:
+        if AIP_STORAGE_URI:
+            await _download_model_from_gcs(AIP_STORAGE_URI, MODEL_PATH)
+        await _launch_vllm()
+        await _wait_for_vllm(timeout=1800)  # 30 min: HF download + GPU load
+        await _run_warmup()
+        _ready = True
+        logger.info("server_ready", port=AIP_HTTP_PORT, model=MODEL_PATH)
+    except Exception as exc:
+        _load_error = str(exc)
+        logger.error("model_load_failed", error=_load_error)
+        # Do NOT exit — keep the server alive so /health keeps returning 200
+        # with error info; operators can inspect and redeploy.
 
 
-@app.on_event("shutdown")
-async def shutdown():
+# ---------------------------------------------------------------------------
+# Application lifespan (replaces deprecated on_event)
+# ---------------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Launch model loading in background — server is immediately alive
+    asyncio.create_task(_load_model_background())
+    logger.info("http_server_started", port=AIP_HTTP_PORT)
+    yield
+    # Shutdown
     if _vllm_proc:
         _vllm_proc.terminate()
 
 
+app = FastAPI(title="Medibox vLLM Vertex Server", docs_url=None, redoc_url=None,
+              lifespan=lifespan)
+
+
 # ---------------------------------------------------------------------------
-# Health route
+# Health route — always returns 200
 # ---------------------------------------------------------------------------
 
 @app.get(AIP_HEALTH_ROUTE)
 async def health():
-    # Always return 200 so Vertex AI startup probe does not kill the container
-    # while the model is loading.  Include state in the body for observability.
+    """
+    Always returns HTTP 200 so Vertex AI startup probes don't kill the container
+    while the GPU model is loading. The 'status' body field indicates true readiness.
+    """
+    if _load_error:
+        return {"status": "error", "detail": _load_error}
     return {"status": "ok" if _ready else "initializing"}
 
 
@@ -219,7 +257,7 @@ async def _run_inference(instance: dict) -> dict:
     }
 
     t0 = time.perf_counter()
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.post(f"{VLLM_URL}/v1/chat/completions", json=payload)
         resp.raise_for_status()
     inference_ms = int((time.perf_counter() - t0) * 1000)
@@ -257,4 +295,4 @@ async def chat_completions(request: Request):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=AIP_HTTP_PORT, log_level="warning")
+    uvicorn.run(app, host="0.0.0.0", port=AIP_HTTP_PORT, log_level="info")

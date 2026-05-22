@@ -22,6 +22,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy application source
 COPY services/api/ /app/services/api/
+COPY services/worker/celery_app.py /app/services/worker/celery_app.py
 COPY services/worker/utils/grid_composer.py /app/services/worker/utils/grid_composer.py
 COPY services/worker/utils/__init__.py /app/services/worker/utils/__init__.py
 COPY services/worker/__init__.py /app/services/worker/__init__.py

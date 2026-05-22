@@ -6,8 +6,21 @@ import os
 
 from celery import Celery
 
-_broker = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
-_backend = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
+# REDIS_URL is set as a plain env var by the deploy scripts (not a secret ref).
+# CELERY_BROKER_URL / CELERY_RESULT_BACKEND are optional secret refs; fall back
+# to REDIS_URL (db=0 for broker, db=1 for backend) when they are absent.
+_redis_base = os.getenv("REDIS_URL", "redis://localhost:6379")
+# Strip trailing db index from REDIS_URL so we can append /0 and /1 cleanly
+_redis_base_no_db = _redis_base.rsplit("/", 1)[0] if "/" in _redis_base.split("://", 1)[-1] else _redis_base
+
+_broker = (
+    os.getenv("CELERY_BROKER_URL")
+    or _redis_base_no_db + "/0"
+)
+_backend = (
+    os.getenv("CELERY_RESULT_BACKEND")
+    or _redis_base_no_db + "/1"
+)
 
 # Redis AUTH string support — inject only if the URL does not already carry auth
 _auth = os.getenv("REDIS_AUTH_STRING", "")

@@ -22,3 +22,4 @@ opentelemetry-exporter-gcp-trace==1.8.0
 opentelemetry-instrumentation-fastapi==0.48b0
 opentelemetry-instrumentation-sqlalchemy==0.48b0
 opentelemetry-instrumentation-redis==0.48b0
+celery[redis]==5.4.0

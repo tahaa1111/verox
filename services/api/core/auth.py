@@ -26,16 +26,43 @@ def _get_firebase_app():
     global _firebase_app
     if _firebase_app is not None:
         return _firebase_app
+    import json as _json
     import firebase_admin
     from firebase_admin import credentials
+
     if not firebase_admin._apps:
         cred_path = settings.firebase_credentials_path
+        # Priority order for credentials:
+        # 1. Explicit file path (local dev with FIREBASE_CREDENTIALS_PATH)
+        # 2. FIREBASE_ADMIN_JSON env var content (Cloud Run secret injection)
+        # 3. Application Default Credentials (fallback)
+        firebase_admin_json_str = os.getenv("FIREBASE_ADMIN_JSON", "")
         if cred_path and os.path.exists(cred_path):
             cred = credentials.Certificate(cred_path)
+        elif firebase_admin_json_str:
+            try:
+                json_data = _json.loads(firebase_admin_json_str)
+                cred = credentials.Certificate(json_data)
+            except Exception as exc:
+                logger.warning("firebase_admin_json_parse_error", error=str(exc))
+                cred = credentials.ApplicationDefault()
         else:
             # Cloud Run: use Application Default Credentials
             cred = credentials.ApplicationDefault()
-        _firebase_app = firebase_admin.initialize_app(cred, {"projectId": settings.firebase_project_id})
+
+        # Resolve project ID: prefer explicit setting, then extract from credentials
+        project_id = settings.firebase_project_id
+        if not project_id and firebase_admin_json_str:
+            try:
+                project_id = _json.loads(firebase_admin_json_str).get("project_id", "")
+            except Exception:
+                pass
+        if not project_id:
+            project_id = settings.gcp_project_id
+
+        _firebase_app = firebase_admin.initialize_app(
+            cred, {"projectId": project_id} if project_id else {}
+        )
     else:
         _firebase_app = firebase_admin.get_app()
     return _firebase_app

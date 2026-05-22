@@ -1,0 +1,59 @@
+# One-shot Cloud Build job: insert admin row + set Firebase claim
+# Usage: gcloud builds submit --config=cloudbuild_admin.yaml --no-source
+substitutions:
+  _FIREBASE_UID: ""   # pass as: --substitutions _FIREBASE_UID=xxx
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - name: python:3.11-slim
+    id: insert-admin
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        pip install psycopg2-binary firebase-admin --quiet
+
+        DB_PASS=$$(gcloud secrets versions access latest --secret=medibox-db-password --project=$PROJECT_ID 2>/dev/null)
+        FB_JSON=$$(gcloud secrets versions access latest --secret=medibox-firebase-admin-json --project=$PROJECT_ID 2>/dev/null)
+
+        python3 - <<PYEOF
+        import psycopg2, json, os, sys
+
+        # Insert admin row
+        conn = psycopg2.connect(
+            host="/cloudsql/$PROJECT_ID:us-central1:medibox-postgres",
+            user="medibox",
+            password=os.environ["DB_PASS"],
+            dbname="medibox"
+        )
+        cur = conn.cursor()
+        uid = "${_FIREBASE_UID}"
+        if uid:
+            cur.execute("""
+                INSERT INTO admin_role_grants (user_id, granted_by, granted_at)
+                VALUES (%s, 'initial-setup', NOW())
+                ON CONFLICT (user_id) DO NOTHING
+            """, (uid,))
+            conn.commit()
+            print(f"Admin row inserted/confirmed for UID: {uid}")
+
+        cur.execute("SELECT user_id, granted_at FROM admin_role_grants ORDER BY granted_at")
+        rows = cur.fetchall()
+        print(f"Admin users: {rows}")
+        conn.close()
+
+        # Set Firebase admin claim if UID provided
+        if uid:
+            import firebase_admin
+            from firebase_admin import credentials, auth
+            fb_json = json.loads(os.environ["FB_JSON"])
+            cred = credentials.Certificate(fb_json)
+            app = firebase_admin.initialize_app(cred)
+            auth.set_custom_user_claims(uid, {"admin": True})
+            print(f"Firebase admin claim set for {uid}")
+        PYEOF
+    env:
+      - DB_PASS=$$DB_PASS
+      - FB_JSON=$$FB_JSON
