@@ -8,9 +8,11 @@ python-dateutil==2.9.0
 structlog==24.4.0
 tenacity==9.0.0
 httpx==0.27.2
-google-cloud-aiplatform==1.65.0
+# google-cloud-aiplatform installed lazily at inference time (VERTEX_ENDPOINT_ID needed)
+# Uncomment when Vertex AI GPU is ready:
+# google-cloud-aiplatform==1.65.0
 google-cloud-storage==2.18.0
-google-cloud-bigquery==3.25.0
+# google-cloud-bigquery==3.25.0   # lazy import in _stream_to_bigquery, not needed at startup
 google-cloud-kms==2.24.0
 cryptography==43.0.1
 pydantic==2.8.2
