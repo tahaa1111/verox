@@ -38,8 +38,8 @@ _WS_PREFIX = "ws:job:"
     default_retry_delay=5,
     acks_late=True,
     reject_on_worker_lost=True,
-    soft_time_limit=120,
-    time_limit=180,
+    soft_time_limit=300,
+    time_limit=360,
 )
 def run_pipeline(self, job_id: str, payload: dict, gcs_prefix: str) -> dict:
     log = logger.bind(job_id=job_id, task_id=self.request.id)

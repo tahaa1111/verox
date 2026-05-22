@@ -25,7 +25,8 @@ def upload_crop(job_id: str, track_id: int, raw_bytes: bytes, content_type: str 
     blob_name = f"{job_id}/crop_{track_id:04d}.jpg"
     bucket = _client().bucket(_CROPS_BUCKET)
     blob = bucket.blob(blob_name)
-    blob.upload_from_string(raw_bytes, content_type=content_type)
+    # Short timeout so network issues fail fast (GCS upload is best-effort)
+    blob.upload_from_string(raw_bytes, content_type=content_type, timeout=8)
     return f"gs://{_CROPS_BUCKET}/{blob_name}"
 
 
