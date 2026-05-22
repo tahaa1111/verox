@@ -15,4 +15,4 @@ google-cloud-kms==2.24.0
 cryptography==43.0.1
 pydantic==2.8.2
 pydantic-settings==2.4.0
-peft==0.13.0
+# peft removed — not used in worker code
