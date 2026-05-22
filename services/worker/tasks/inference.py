@@ -60,11 +60,14 @@ def run_pipeline(self, job_id: str, payload: dict, gcs_prefix: str) -> dict:
 
         t0 = time.perf_counter()
 
-        # 2. Upload crops to GCS
+        # 2. Upload crops to GCS (best-effort — VPC network may block public egress)
         for crop in crops:
             track_id = crop.get("track_id", 0)
             raw_bytes = base64.b64decode(crop["image_base64"])
-            upload_crop(job_id, track_id, raw_bytes)
+            try:
+                upload_crop(job_id, track_id, raw_bytes)
+            except Exception as gcs_exc:
+                log.warning("gcs_upload_skipped", track_id=track_id, reason=str(gcs_exc)[:120])
 
         # 3. Compose grids
         grids = compose_grids(crops)
