@@ -62,9 +62,11 @@ app.conf.update(
     result_expires=3600,
 )
 
-# Explicitly import task modules so Celery registers them.
-# autodiscover_tasks(["services.worker.tasks"]) would look for
-# a "tasks.py" file inside the package — our tasks are in
-# inference.py and postprocessing.py, so we import them directly.
-import services.worker.tasks.inference        # noqa: F401, E402
-import services.worker.tasks.postprocessing   # noqa: F401, E402
+# Explicitly import task modules so Celery registers them on the worker.
+# The API container imports celery_app only to send tasks (no task code
+# present there), so we guard with try/except to avoid ModuleNotFoundError.
+try:
+    import services.worker.tasks.inference        # noqa: F401, E402
+    import services.worker.tasks.postprocessing   # noqa: F401, E402
+except ImportError:
+    pass  # Running in API container — task modules not needed for sending
