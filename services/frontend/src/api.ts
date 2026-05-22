@@ -60,3 +60,13 @@ export async function submitCapture(deviceId = "pi-0001"): Promise<SubmitRespons
   const { data } = await http.post<SubmitResponse>(`/camera/capture?device_id=${deviceId}`);
   return data;
 }
+
+/** Signal the Pi to start the camera (frontend-triggered via Redis command relay). */
+export async function signalCameraStart(deviceId = "pi-0001"): Promise<void> {
+  await http.post(`/camera/start?device_id=${deviceId}`);
+}
+
+/** Signal the Pi to stop the camera. */
+export async function signalCameraStop(deviceId = "pi-0001"): Promise<void> {
+  await http.post(`/camera/stop?device_id=${deviceId}`);
+}

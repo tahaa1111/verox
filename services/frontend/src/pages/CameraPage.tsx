@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { getCameraSnapshot, submitCapture } from "../api";
+import { getCameraSnapshot, submitCapture, signalCameraStart, signalCameraStop } from "../api";
 
 type CameraState = "idle" | "streaming" | "capturing" | "submitting" | "error";
 
@@ -32,23 +32,29 @@ export function CameraPage() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null; }
     setCameraState("idle");
+    // Tell the Pi to stop pushing frames
+    signalCameraStop().catch(() => {});
   }, []);
 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
-  const startCamera = () => {
+  const startCamera = async () => {
     setCameraState("streaming");
     setError(null);
     let gotFrame = false;
 
-    // Timeout if no frame arrives
+    // Signal the Pi to start — fire and forget (Pi picks it up within 2 s)
+    try { await signalCameraStart(); } catch { /* non-fatal */ }
+
+    // Timeout if no frame arrives within START_TIMEOUT_MS
     startTimerRef.current = setTimeout(() => {
       if (!gotFrame) {
         stopPolling();
         setError(
-          "No camera feed received. Make sure the Pi camera is running:\n" +
+          "No camera feed received within 8 s.\n" +
+          "Make sure the Pi (medibox-camera service) is running:\n" +
           "  ssh verox@100.84.95.114\n" +
-          "  cd ~/yolo-ws && source venv/bin/activate && python app.py"
+          "  sudo systemctl start medibox-camera"
         );
         setCameraState("error");
       }
@@ -189,16 +195,17 @@ export function CameraPage() {
         )}
       </div>
 
-      {/* Pi start instructions */}
+      {/* Status info */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-xs text-gray-600">
-        <p className="font-semibold mb-1">How to start the Pi camera:</p>
-        <code className="block bg-gray-100 rounded px-3 py-2 font-mono whitespace-pre">
-{`ssh verox@100.84.95.114     # password: verox1
-cd ~/yolo-ws
-source venv/bin/activate
-python app.py`}
-        </code>
-        <p className="mt-2 text-gray-500">The Pi will push frames automatically when the camera starts.</p>
+        <p className="font-semibold mb-1">📡 Pi Camera Status</p>
+        <p>
+          Pressing <strong>Start Camera</strong> automatically signals the Pi (pi-0001) to begin
+          streaming. The feed appears within ~2 seconds if the Pi is online.
+        </p>
+        <p className="mt-1 text-gray-500">
+          If no feed appears, ensure the Pi is powered and the{" "}
+          <code className="bg-gray-100 px-1 rounded">medibox-camera</code> service is running.
+        </p>
       </div>
 
       <p className="text-xs text-gray-400 border-t pt-3">

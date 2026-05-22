@@ -22,13 +22,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV PATH="/root/google-cloud-sdk/bin:${PATH}"
 
 RUN pip install --no-cache-dir \
-    autoawq==0.2.7 \
     qwen-vl-utils==0.0.8 \
     fastapi==0.115.0 \
-    uvicorn[standard]==0.30.6 \
+    "uvicorn[standard]==0.30.6" \
     httpx==0.27.2 \
     structlog==24.4.0 \
     Pillow==10.4.0
+# NOTE: autoawq is NOT installed here — vllm/vllm-openai already ships a
+# compatible version. Installing it again can override internal stubs and
+# cause "AttributeError: module 'awq' has no attribute 'quantize'" crashes.
 
 WORKDIR /app
 
