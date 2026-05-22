@@ -62,4 +62,9 @@ app.conf.update(
     result_expires=3600,
 )
 
-app.autodiscover_tasks(["services.worker.tasks"])
+# Explicitly import task modules so Celery registers them.
+# autodiscover_tasks(["services.worker.tasks"]) would look for
+# a "tasks.py" file inside the package — our tasks are in
+# inference.py and postprocessing.py, so we import them directly.
+import services.worker.tasks.inference        # noqa: F401, E402
+import services.worker.tasks.postprocessing   # noqa: F401, E402
