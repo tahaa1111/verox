@@ -18,6 +18,7 @@ import uuid
 import cv2
 import asyncio
 import httpx
+import os
 import time
 import sys
 from pathlib import Path
@@ -30,10 +31,34 @@ from yolo_worker import yolo_loop
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-CLOUD_API = "https://medibox-api-5w7o5tyr2q-uc.a.run.app"
-CAMERA_SECRET = "medibox-camera-prod-2026"
-DEVICE_ID = "pi-0001"
-EDGE_CONFIG = "/etc/medibox/edge.toml"
+CLOUD_API = os.getenv("CLOUD_API_URL", "https://medibox-api-5w7o5tyr2q-uc.a.run.app")
+DEVICE_ID = os.getenv("DEVICE_ID", "pi-0001")
+EDGE_CONFIG = os.getenv("EDGE_CONFIG", "/etc/medibox/edge.toml")
+
+# Camera secret — loaded from env var, then edge.toml, then dev fallback.
+# In production the Pi's /etc/medibox/edge.toml or systemd env file supplies this.
+def _load_camera_secret() -> str:
+    # 1. Environment variable (highest priority — systemd EnvironmentFile)
+    env_val = os.getenv("CAMERA_SECRET")
+    if env_val:
+        return env_val
+    # 2. edge.toml  [cloud] section
+    cfg_path = Path(EDGE_CONFIG)
+    if cfg_path.exists():
+        try:
+            import tomllib
+            with open(cfg_path, "rb") as f:
+                cfg = tomllib.load(f)
+            secret = cfg.get("cloud", {}).get("camera_secret")
+            if secret:
+                return secret
+        except Exception:
+            pass
+    # 3. Dev fallback (never reaches production where edge.toml is present)
+    print("[config] WARNING: using dev camera secret — set CAMERA_SECRET env var in production")
+    return "medibox-camera-prod-2026"
+
+CAMERA_SECRET = _load_camera_secret()
 
 # Minimum seconds between submissions (avoid re-submitting the same prescription)
 SUBMIT_COOLDOWN_S = 10.0
