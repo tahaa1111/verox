@@ -128,11 +128,11 @@ def cloud_push_loop():
     Includes stable_progress so the frontend can display the countdown."""
     client = httpx.Client(timeout=2.0)
     while True:
-        if state.running and state.latest_frame is not None:
-            frame = state.latest_frame.copy()
-            _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
-            b64 = base64.b64encode(buf).decode()
-            try:
+        try:
+            if state.running and state.latest_frame is not None:
+                frame = state.latest_frame.copy()
+                _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
+                b64 = base64.b64encode(buf).decode()
                 client.post(
                     f"{CLOUD_API}/v1/camera/push",
                     json={
@@ -142,8 +142,8 @@ def cloud_push_loop():
                     },
                     headers={"X-Camera-Secret": CAMERA_SECRET},
                 )
-            except Exception:
-                pass
+        except Exception as e:
+            print(f"[push] error (non-fatal): {e}")
         time.sleep(0.1)
 
 
