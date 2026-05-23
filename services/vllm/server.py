@@ -114,9 +114,9 @@ async def _launch_vllm() -> None:
         "--gpu-memory-utilization", "0.90",
         "--max-model-len", max_model_len,
         "--max-num-seqs", max_num_seqs,
-        "--limit-mm-per-prompt", "image=1",   # key=value format for vLLM v0.6.x
+        "--limit-mm-per-prompt", "image=1",   # key=value format (valid v0.7.x–v0.13.x)
         "--trust-remote-code",                # required for Qwen2.5-VL tokeniser
-        "--disable-log-requests",             # v0.6.x flag name (renamed in v0.21.0)
+        "--disable-log-requests",             # valid through v0.7.x–v0.13.x
         "--served-model-name", "qwen2.5-vl-7b-awq",  # alias used by worker + warmup
         "--host", "0.0.0.0",
         "--port", str(VLLM_PORT),

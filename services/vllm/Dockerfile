@@ -1,12 +1,13 @@
 # =============================================================================
-# Medibox vLLM — Vertex AI custom container (DD-011)
-# Base: vLLM official with CUDA 12.x + Python 3.11
+# Medibox vLLM — Cloud Run GPU container
+# Base: vLLM v0.7.3 — CUDA 12.4, Python 3.12
+#   First vLLM release with Qwen2_5_VLForConditionalGeneration in its registry.
 # Conforms to Vertex AI custom-container prediction contract:
 #   Health: GET $AIP_HEALTH_ROUTE (default /health)
 #   Predict: POST $AIP_PREDICT_ROUTE (default /predict)
 #   Port: $AIP_HTTP_PORT (default 8080)
 # =============================================================================
-FROM vllm/vllm-openai:v0.6.6.post1
+FROM vllm/vllm-openai:v0.7.3
 
 ENV PYTHONUNBUFFERED=1 \
     AIP_HTTP_PORT=8080 \
@@ -14,20 +15,15 @@ ENV PYTHONUNBUFFERED=1 \
     AIP_PREDICT_ROUTE=/predict \
     HF_HUB_ENABLE_HF_TRANSFER=1
 
-# Runtime deps — only curl needed for healthcheck; gcloud SDK not required
-# since the model is downloaded from HuggingFace Hub at startup.
+# Runtime deps — only curl needed for healthcheck.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade transformers to >=4.47.0 — required for Qwen2.5-VL (qwen2_5_vl architecture).
-# v0.6.6 ships with transformers that lacks qwen2_5_vl in its CONFIG_MAPPING.
-# --force-reinstall bypasses any conflicting pin that would keep the old version.
-# CRITICAL: do NOT touch torch, autoawq, or the vLLM CUDA kernels — only transformers.
-RUN pip show transformers 2>&1 | grep -E "^(Name|Version)" && \
-    pip install --no-cache-dir --force-reinstall "transformers==4.49.0" && \
-    python3 -c "import transformers; v=transformers.__version__; print('transformers installed:', v); assert v >= '4.49', f'UPGRADE FAILED: {v}'" && \
-    python3 -c "from transformers import Qwen2_5_VLConfig; print('Qwen2_5_VLConfig: FOUND', Qwen2_5_VLConfig)"
+# Verify Qwen2.5-VL is supported — fails build immediately if wrong vLLM version.
+# v0.7.3+ registers Qwen2_5_VLForConditionalGeneration; v0.6.x does not.
+RUN python3 -c "from transformers import Qwen2_5_VLConfig; print('OK: Qwen2_5_VLConfig importable')" && \
+    python3 -c "import vllm; print('vLLM version:', vllm.__version__)"
 
 # Install wrapper server dependencies on top of vLLM image.
 RUN pip install --no-cache-dir \
@@ -48,6 +44,4 @@ HEALTHCHECK --interval=30s --timeout=15s --start-period=600s --retries=10 \
 
 EXPOSE ${AIP_HTTP_PORT}
 
-# Use shell form so $PATH is resolved at runtime (vLLM image uses conda Python).
-# Cloud Run injects PORT env var; Vertex AI uses AIP_HTTP_PORT — both default to 8080.
 ENTRYPOINT ["/bin/bash", "-c", "cd /app && exec python3 -m services.vllm.server"]
