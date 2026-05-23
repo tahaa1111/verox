@@ -96,10 +96,10 @@ export function JobTrackerPage() {
               Submit Correction
             </Link>
             <Link
-              to="/submit"
+              to="/"
               className="bg-brand-600 hover:bg-brand-700 text-white font-medium text-sm px-4 py-2 rounded-md transition-colors"
             >
-              New Prescription
+              New Scan
             </Link>
           </div>
         </>

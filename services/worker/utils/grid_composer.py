@@ -42,10 +42,11 @@ MAX_CELLS = CELLS_PER_ROW * CELLS_PER_ROW  # 9
 
 @dataclass
 class CropSlot:
-    """Maps a cell position (1-based) to the original track_id."""
-    cell_number: int    # 1–9
+    """Maps a cell position (1-based) to the original track_id and source bbox."""
+    cell_number: int             # 1–9
     track_id: int
-    original_index: int  # index in the original crops list
+    original_index: int          # index in the original crops list
+    bbox: list[float] | None = None  # normalized [x1, y1, x2, y2] from Pi YOLO detection
 
 
 @dataclass
@@ -103,10 +104,12 @@ def _compose_single_grid(crops: list[dict], grid_index: int, offset: int) -> Gri
         draw.rectangle([lx - 2, ly - 2, lx + 18, ly + 18], fill=LABEL_BG)
         draw.text((lx, ly), label, fill=LABEL_COLOR)
 
+        bbox_raw = crop.get("bbox")
         slots.append(CropSlot(
             cell_number=cell_number,
             track_id=crop.get("track_id", offset + i),
             original_index=offset + i,
+            bbox=bbox_raw if isinstance(bbox_raw, list) and len(bbox_raw) == 4 else None,
         ))
 
     # Encode to JPEG

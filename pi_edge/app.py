@@ -35,8 +35,6 @@ CAMERA_SECRET = "medibox-camera-prod-2026"
 DEVICE_ID = "pi-0001"
 EDGE_CONFIG = "/etc/medibox/edge.toml"
 
-# Auto-submit: only submit when confidence >= this threshold
-SUBMIT_CONFIDENCE = 0.5
 # Minimum seconds between submissions (avoid re-submitting the same prescription)
 SUBMIT_COOLDOWN_S = 10.0
 
@@ -101,7 +99,8 @@ def _do_start():
 
 
 def cloud_push_loop():
-    """Push raw frames to Cloud API for live preview at ~10 fps."""
+    """Push raw frames to Cloud API for live preview at ~10 fps.
+    Includes stable_progress so the frontend can display the countdown."""
     client = httpx.Client(timeout=2.0)
     while True:
         if state.running and state.latest_frame is not None:
@@ -111,7 +110,11 @@ def cloud_push_loop():
             try:
                 client.post(
                     f"{CLOUD_API}/v1/camera/push",
-                    json={"frame": b64, "device_id": DEVICE_ID},
+                    json={
+                        "frame": b64,
+                        "device_id": DEVICE_ID,
+                        "stable_progress": float(state.stable_progress),
+                    },
                     headers={"X-Camera-Secret": CAMERA_SECRET},
                 )
             except Exception:
@@ -121,45 +124,55 @@ def cloud_push_loop():
 
 def cloud_submit_loop():
     """
-    Auto-submit: when YOLO detects prescription crops, submit them to OCR.
-    Cooldown: at most once every SUBMIT_COOLDOWN_S seconds.
+    Stability-triggered auto-submit: dispatched when yolo_worker sets state.should_submit.
+
+    The stability tracker (yolo_worker.py) holds the bounding box steady for 3 s at
+    IoU ≥ 0.85 before setting should_submit = True.  This loop consumes the flag,
+    submits the snapshot crops to /v1/submit, then pushes the resulting job_id back
+    to /v1/camera/push-job so the frontend can navigate to the results page.
+
+    Cooldown (SUBMIT_COOLDOWN_S) prevents duplicate submissions if the prescription
+    lingers in the frame after the first successful submit.
     """
     global _last_submit_time
     client = httpx.Client(timeout=15.0)
 
     while True:
-        time.sleep(0.5)  # check every 500ms
+        time.sleep(0.25)  # check 4× per second
 
         if not state.running:
             continue
 
-        # Check cooldown
+        # Wait for stability tracker signal
+        if not state.should_submit:
+            continue
+
+        # Consume the flag immediately so concurrent loops don't double-fire
+        state.should_submit = False
+
+        # Cooldown guard
         if time.time() - _last_submit_time < SUBMIT_COOLDOWN_S:
+            print("[submit] ⏳ Cooldown active — skipping this trigger")
             continue
 
-        # Check if there are fresh crops to submit
-        crops = getattr(state, "detected_crops", None)
+        crops = list(state.detected_crops)  # snapshot
         if not crops:
+            print("[submit] No crops available — skipping")
             continue
 
-        # Filter by confidence
-        high_conf_crops = [c for c in crops if c["confidence"] >= SUBMIT_CONFIDENCE]
-        if not high_conf_crops:
-            continue
-
-        # Get Firebase token
+        # Authenticate
         token = _get_firebase_token()
         if not token:
             print("[submit] No auth token — skipping")
             continue
 
-        # Build payload
+        # Build submission payload
         session_id = str(uuid.uuid4())
         payload = {
             "device_id": DEVICE_ID,
             "session_id": session_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "crops": high_conf_crops[:9],  # max 9 crops per submission
+            "crops": crops[:9],   # max 9 crops per grid
         }
 
         try:
@@ -169,11 +182,20 @@ def cloud_submit_loop():
                 headers={"Authorization": f"Bearer {token}"},
             )
             if resp.status_code == 202:
-                job = resp.json()
-                job_id = job.get("job_id", "?")
+                job_id = resp.json().get("job_id", "?")
                 print(f"[submit] ✅ Job queued: {job_id} (session={session_id[:8]})")
                 _last_submit_time = time.time()
-                state.detected_crops = []  # clear crops after submission
+                state.detected_crops = []  # clear after successful submit
+
+                # Push job_id to API so the frontend can auto-navigate to results
+                try:
+                    client.post(
+                        f"{CLOUD_API}/v1/camera/push-job",
+                        json={"job_id": job_id, "device_id": DEVICE_ID},
+                        headers={"X-Camera-Secret": CAMERA_SECRET},
+                    )
+                except Exception as push_err:
+                    print(f"[submit] push-job error (non-fatal): {push_err}")
             else:
                 print(f"[submit] ⚠ API returned {resp.status_code}: {resp.text[:200]}")
         except Exception as e:

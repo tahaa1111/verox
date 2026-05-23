@@ -89,6 +89,7 @@ def run_pipeline(self, job_id: str, payload: dict, gcs_prefix: str) -> dict:
                 job_id=job_id,
                 cell_count=len(grid.slots),
                 model_version=active_model,
+                crop_slots=grid.slots,   # pass bbox data for spatial prompt hints
             )
             all_raw_outputs.append({"result": result, "slots": grid.slots})
             _ws_publish(job_id, {

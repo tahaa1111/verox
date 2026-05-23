@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { JobPollResponse, SubmitResponse } from "./types";
+import type { CameraSnapshotResponse, JobPollResponse, SubmitResponse } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE_URL || "/v1";
 
@@ -11,21 +11,7 @@ http.interceptors.request.use((config) => {
   return config;
 });
 
-export async function submitPrescription(
-  deviceId: string,
-  sessionId: string,
-  crops: File[]
-): Promise<SubmitResponse> {
-  const form = new FormData();
-  form.append("device_id", deviceId);
-  form.append("session_id", sessionId);
-  crops.forEach((f) => form.append("crops", f));
-  const { data } = await http.post<SubmitResponse>("/submit", form, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-  return data;
-}
-
+/** Poll a job by ID for status + result. */
 export async function pollJob(jobId: string): Promise<JobPollResponse> {
   const { data } = await http.get<JobPollResponse>(`/result/${jobId}`);
   return data;
@@ -51,17 +37,29 @@ export async function setMaintenance(active: boolean, reason: string): Promise<v
   await http.post("/admin/maintenance", { active, reason });
 }
 
-export async function getCameraSnapshot(deviceId = "pi-0001"): Promise<{ frame: string }> {
-  const { data } = await http.get<{ frame: string }>(`/camera/snapshot?device_id=${deviceId}`);
+/**
+ * Get the latest camera snapshot plus stability progress and latest job_id.
+ * Returns stable_progress (0→1) from Pi stability tracker, and latest_job_id
+ * once the Pi auto-submits after a stable hold.
+ */
+export async function getCameraSnapshot(
+  deviceId = "pi-0001"
+): Promise<CameraSnapshotResponse> {
+  const { data } = await http.get<CameraSnapshotResponse>(
+    `/camera/snapshot?device_id=${deviceId}`
+  );
   return data;
 }
 
+/** Manual capture: take the current frame from Redis and submit as a job. */
 export async function submitCapture(deviceId = "pi-0001"): Promise<SubmitResponse> {
-  const { data } = await http.post<SubmitResponse>(`/camera/capture?device_id=${deviceId}`);
+  const { data } = await http.post<SubmitResponse>(
+    `/camera/capture?device_id=${deviceId}`
+  );
   return data;
 }
 
-/** Signal the Pi to start the camera (frontend-triggered via Redis command relay). */
+/** Signal the Pi to start the camera (via Redis command relay). */
 export async function signalCameraStart(deviceId = "pi-0001"): Promise<void> {
   await http.post(`/camera/start?device_id=${deviceId}`);
 }

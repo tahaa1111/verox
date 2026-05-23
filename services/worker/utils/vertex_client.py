@@ -37,16 +37,24 @@ def infer_grid(
     cell_count: int,
     model_version: str = "",
     prompt_version: str = "v1",
+    crop_slots: list | None = None,
 ) -> dict[str, Any]:
     """
     Send a composed grid image to Vertex AI (or local vLLM fallback).
+
+    Args:
+        crop_slots: list of CropSlot objects carrying bbox info for spatial hints.
+                    When provided, the user prompt includes qualitative position hints
+                    ("Cell 1: top-left region [x:0.05–0.48, y:0.03–0.52]") to help
+                    the model assign fields (patient block vs. medication list).
+
     Returns the raw prediction dict: {raw_output, cells, logprobs, inference_ms, ...}
     """
     t0 = time.perf_counter()
     if _VERTEX_ENDPOINT_ID:
-        result = _call_vertex(grid_b64, cell_count, prompt_version, job_id)
+        result = _call_vertex(grid_b64, cell_count, prompt_version, job_id, crop_slots)
     else:
-        result = _call_local_vllm(grid_b64, cell_count, prompt_version, job_id)
+        result = _call_local_vllm(grid_b64, cell_count, prompt_version, job_id, crop_slots)
     result["inference_ms"] = int((time.perf_counter() - t0) * 1000)
     result["prompt_version"] = prompt_version
     result["model_version"] = model_version or _VLLM_MODEL
@@ -55,18 +63,52 @@ def infer_grid(
     return result
 
 
-def _call_vertex(grid_b64: str, cell_count: int, prompt_version: str, job_id: str) -> dict:
+def _build_bbox_hints(crop_slots: list | None) -> str:
+    """
+    Build a natural-language spatial context string from CropSlot bbox data.
+
+    Example output:
+        Cell 1: top-left region [x:0.05–0.48, y:0.03–0.52] — likely patient block.
+        Cell 2: top-right region [x:0.52–0.95, y:0.03–0.48].
+
+    Returns an empty string when no slots are provided (graceful degradation).
+    """
+    if not crop_slots:
+        return ""
+    lines: list[str] = []
+    for slot in crop_slots:
+        bbox = getattr(slot, "bbox", None)
+        if not bbox or len(bbox) < 4:
+            continue
+        x1, y1, x2, y2 = bbox
+        cx = (x1 + x2) / 2
+        cy = (y1 + y2) / 2
+        h_pos = "left" if cx < 0.4 else ("right" if cx > 0.6 else "center")
+        v_pos = "top" if cy < 0.4 else ("bottom" if cy > 0.6 else "middle")
+        hint = f"Cell {slot.cell_number}: {v_pos}-{h_pos} region [x:{x1:.2f}–{x2:.2f}, y:{y1:.2f}–{y2:.2f}]"
+        lines.append(hint)
+    if not lines:
+        return ""
+    return "Spatial context (original frame positions):\n" + "\n".join(lines) + "\n\n"
+
+
+def _call_vertex(
+    grid_b64: str, cell_count: int, prompt_version: str, job_id: str,
+    crop_slots: list | None = None,
+) -> dict:
     from google.cloud import aiplatform
     aiplatform.init(project=_GCP_PROJECT, location=_VERTEX_REGION)
     endpoint = aiplatform.Endpoint(endpoint_name=_VERTEX_ENDPOINT_ID)
 
     system_prompt = _load_system_prompt()
+    bbox_hints = _build_bbox_hints(crop_slots)
     instances = [{
         "image_b64": grid_b64,
         "system_prompt": system_prompt,
         "prompt_version": prompt_version,
         "cell_count": cell_count,
         "job_id": job_id,
+        "bbox_hints": bbox_hints,
     }]
     response = endpoint.predict(instances=instances)
     prediction = response.predictions[0]
@@ -92,10 +134,20 @@ def _get_cloud_run_id_token(audience: str) -> str | None:
         return None
 
 
-def _call_local_vllm(grid_b64: str, cell_count: int, prompt_version: str, job_id: str) -> dict:
+def _call_local_vllm(
+    grid_b64: str, cell_count: int, prompt_version: str, job_id: str,
+    crop_slots: list | None = None,
+) -> dict:
     """Call Cloud Run vLLM service using OpenAI-compatible API with IAM auth."""
     import httpx
     system_prompt = _load_system_prompt()
+    bbox_hints = _build_bbox_hints(crop_slots)
+    user_text = (
+        f"{bbox_hints}"
+        f"Extract prescriptions from all {cell_count} cell(s). "
+        f"Use the spatial context above to distinguish patient info (typically top) "
+        f"from medication lists (typically center/bottom). Return JSON."
+    )
     payload = {
         "model": _VLLM_MODEL,
         "messages": [
@@ -103,8 +155,7 @@ def _call_local_vllm(grid_b64: str, cell_count: int, prompt_version: str, job_id
             {"role": "user", "content": [
                 {"type": "image_url",
                  "image_url": {"url": f"data:image/jpeg;base64,{grid_b64}"}},
-                {"type": "text",
-                 "text": f"Extract prescriptions from all {cell_count} cells. Return JSON."},
+                {"type": "text", "text": user_text},
             ]},
         ],
         "max_tokens": 4096,

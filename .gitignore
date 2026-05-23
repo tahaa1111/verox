@@ -50,3 +50,6 @@ models/registry/
 *.swo
 .DS_Store
 Thumbs.db
+
+# Nested Pi repo — managed separately, not a submodule
+verox/
