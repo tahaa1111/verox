@@ -222,7 +222,7 @@ steps:
       - --timeout=3600s
       - --no-allow-unauthenticated
       - --update-secrets=DATABASE_URL_SYNC=medibox-database-url-sync:latest,REDIS_AUTH_STRING=medibox-redis-auth:latest,PII_ENCRYPTION_KEY=medibox-pii-encryption-key:latest,CELERY_BROKER_URL=medibox-celery-broker-url:latest,CELERY_RESULT_BACKEND=medibox-celery-result-backend:latest
-      - --update-env-vars=^;^ENVIRONMENT=production;GCP_PROJECT_ID=$PROJECT_ID;GCP_REGION=${_REGION};GCS_CROPS_BUCKET=$PROJECT_ID-crops;GCS_MODELS_BUCKET=$PROJECT_ID-models;KMS_KEY_NAME=projects/$PROJECT_ID/locations/${_REGION}/keyRings/medibox/cryptoKeys/pii-key;CELERY_QUEUES=inference,default;VERTEX_ENDPOINT_ID=1778860829916004352;VERTEX_ENDPOINT_REGION=us-central1
+      - --update-env-vars=^;^ENVIRONMENT=production;GCP_PROJECT_ID=$PROJECT_ID;GCP_REGION=${_REGION};GCS_CROPS_BUCKET=$PROJECT_ID-crops;GCS_MODELS_BUCKET=$PROJECT_ID-models;KMS_KEY_NAME=projects/$PROJECT_ID/locations/${_REGION}/keyRings/medibox/cryptoKeys/pii-key;CELERY_QUEUES=inference,default;VERTEX_ENDPOINT_ID=1778860829916004352;VERTEX_ENDPOINT_REGION=us-central1;LOCAL_VLLM_URL=https://medibox-vllm-gpu-272258744118.us-central1.run.app
     waitFor: [push-worker]
 
   # ---------------------------------------------------------------------------

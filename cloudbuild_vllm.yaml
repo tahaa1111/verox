@@ -19,30 +19,29 @@ steps:
       - build
       - -f
       - services/vllm/Dockerfile
-      # Tag with both :latest and a stable semver so deployments are pinned
       - -t
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:${_IMAGE_TAG}
       - -t
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:v3
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:latest
       - .
     timeout: 1800s
+
+  - name: gcr.io/cloud-builders/docker
+    id: push-vllm-tag
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:${_IMAGE_TAG}
+    waitFor: [build-vllm]
 
   - name: gcr.io/cloud-builders/docker
     id: push-vllm-latest
     args:
       - push
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:${_IMAGE_TAG}
-    waitFor: [build-vllm]
-
-  - name: gcr.io/cloud-builders/docker
-    id: push-vllm-v3
-    args:
-      - push
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:v3
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:latest
     waitFor: [build-vllm]
 
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:${_IMAGE_TAG}
-  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:v3
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/medibox-vllm:latest
 
 timeout: 2400s
