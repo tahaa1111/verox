@@ -180,8 +180,8 @@ steps:
       - --memory=1Gi
       - --timeout=60s
       - --allow-unauthenticated
-      - --update-secrets=DB_PASSWORD=medibox-db-password:latest,REDIS_AUTH_STRING=medibox-redis-auth:latest,FIREBASE_ADMIN_JSON=medibox-firebase-admin-json:latest,JWT_SIGNING_KEY=medibox-jwt-signing-key:latest,PII_ENCRYPTION_KEY=medibox-pii-encryption-key:latest,CELERY_BROKER_URL=medibox-celery-broker-url:latest
-      - --update-env-vars=ENVIRONMENT=production,GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=$_REGION,GCS_CROPS_BUCKET=$PROJECT_ID-crops,GCS_MODELS_BUCKET=$PROJECT_ID-models,KMS_KEY_NAME=projects/$PROJECT_ID/locations/$_REGION/keyRings/medibox/cryptoKeys/pii-key,DB_HOST=/cloudsql/$PROJECT_ID:$_REGION:medibox-postgres,CAMERA_SECRET=medibox-camera-prod-2026,FIREBASE_PROJECT_ID=$PROJECT_ID
+      - --update-secrets=DB_PASSWORD=medibox-db-password:latest,REDIS_AUTH_STRING=medibox-redis-auth:latest,FIREBASE_ADMIN_JSON=medibox-firebase-admin-json:latest,JWT_SIGNING_KEY=medibox-jwt-signing-key:latest,PII_ENCRYPTION_KEY=medibox-pii-encryption-key:latest,CELERY_BROKER_URL=medibox-celery-broker-url:latest,CAMERA_SECRET=medibox-camera-secret:latest
+      - --update-env-vars=ENVIRONMENT=production,GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=$_REGION,GCS_CROPS_BUCKET=$PROJECT_ID-crops,GCS_MODELS_BUCKET=$PROJECT_ID-models,KMS_KEY_NAME=projects/$PROJECT_ID/locations/$_REGION/keyRings/medibox/cryptoKeys/pii-key,DB_HOST=/cloudsql/$PROJECT_ID:$_REGION:medibox-postgres,FIREBASE_PROJECT_ID=$PROJECT_ID
     waitFor: [push-api]
 
   # ---------------------------------------------------------------------------

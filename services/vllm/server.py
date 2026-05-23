@@ -30,7 +30,8 @@ from fastapi.responses import JSONResponse
 
 logger = structlog.get_logger("medibox.vllm")
 
-AIP_HTTP_PORT = int(os.getenv("AIP_HTTP_PORT", "8080"))
+# Cloud Run injects PORT; Vertex AI uses AIP_HTTP_PORT — both default to 8080
+AIP_HTTP_PORT = int(os.getenv("AIP_HTTP_PORT") or os.getenv("PORT") or "8080")
 AIP_HEALTH_ROUTE = os.getenv("AIP_HEALTH_ROUTE", "/health")
 AIP_PREDICT_ROUTE = os.getenv("AIP_PREDICT_ROUTE", "/predict")
 AIP_STORAGE_URI = os.getenv("AIP_STORAGE_URI", "")  # GCS path to model artifacts
@@ -95,24 +96,35 @@ async def _launch_vllm() -> None:
             "Redeploy on T4 (sm7.5) or newer."
         )
 
+    # T4 = sm75 < 8.0: cap context at 4096 and limit seqs to fit in 16 GB VRAM.
+    # Ampere+ (sm80+): use full 8192 context with 16 concurrent sequences.
+    is_t4 = cc < 8.0
+    max_model_len = "4096" if is_t4 else "8192"
+    max_num_seqs = "8" if is_t4 else "16"
+
+    # AWQ quantisation: on T4 (sm75) use standard AWQ kernels.
+    # On Ampere+ (sm80+) awq_marlin gives faster throughput, but AWQ also works.
+    quantization = "awq"
+
     cmd = [
         sys.executable, "-m", "vllm.entrypoints.openai.api_server",
         "--model", MODEL_PATH,
-        "--quantization", "awq",
+        "--quantization", quantization,
         "--dtype", "float16",
         "--gpu-memory-utilization", "0.90",
-        "--max-model-len", "8192",
-        "--max-num-seqs", "16",
-        "--limit-mm-per-prompt", "image=1",
-        "--disable-log-requests",
-        "--served-model-name", VLLM_MODEL_NAME,
+        "--max-model-len", max_model_len,
+        "--max-num-seqs", max_num_seqs,
+        "--limit-mm-per-prompt", "image=1",   # key=value format for vLLM v0.6.x
+        "--trust-remote-code",                # required for Qwen2.5-VL tokeniser
+        "--disable-log-requests",             # v0.6.x flag name (renamed in v0.21.0)
+        "--served-model-name", "qwen2.5-vl-7b-awq",  # alias used by worker + warmup
         "--host", "0.0.0.0",
         "--port", str(VLLM_PORT),
     ]
-    # T4 (sm75): smaller context + eager mode (no CUDA graphs) to fit in 16 GB
-    if cc < 8.0:
-        cmd[cmd.index("8192")] = "4096"
-        cmd[cmd.index("16")] = "8"
+
+    # T4: disable CUDA graphs (enforce eager) to save VRAM and avoid
+    # capture failures on sm75.
+    if is_t4:
         cmd.append("--enforce-eager")
 
     lora_path = os.getenv("LORA_ADAPTER_PATH", "")
@@ -184,7 +196,7 @@ async def _load_model_background() -> None:
 async def lifespan(app: FastAPI):
     # Launch model loading in background — server is immediately alive
     asyncio.create_task(_load_model_background())
-    logger.info("http_server_started", port=AIP_HTTP_PORT)
+    logger.info("http_server_started", port=AIP_HTTP_PORT, model=MODEL_PATH)
     yield
     # Shutdown
     if _vllm_proc:
@@ -295,4 +307,40 @@ async def chat_completions(request: Request):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=AIP_HTTP_PORT, log_level="info")
+    # ---------------------------------------------------------------------------
+    # Hardened startup: catch ALL exit paths including SystemExit (sys.exit())
+    # so the container NEVER exits on Vertex AI. The fallback HTTP server
+    # keeps the health probe alive and exposes the error in the JSON body.
+    # ---------------------------------------------------------------------------
+    try:
+        uvicorn.run(app, host="0.0.0.0", port=AIP_HTTP_PORT, log_level="info")
+    except BaseException as startup_exc:
+        import http.server
+        import json as _json
+        import socketserver
+
+        _err = f"uvicorn startup failed: {startup_exc}"
+        print(f"[FATAL] {_err}", file=sys.stderr, flush=True)
+
+        class _FallbackHandler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                body = _json.dumps({"status": "startup_error", "detail": _err}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            def do_POST(self):  # noqa: N802
+                body = _json.dumps({"error": "server failed to start", "detail": _err}).encode()
+                self.send_response(503)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            def log_message(self, fmt, *args):  # silence default access log
+                pass
+
+        socketserver.TCPServer.allow_reuse_address = True
+        with socketserver.TCPServer(("0.0.0.0", AIP_HTTP_PORT), _FallbackHandler) as _srv:
+            print(f"[FALLBACK] Minimal HTTP server running on port {AIP_HTTP_PORT}", flush=True)
+            _srv.serve_forever()

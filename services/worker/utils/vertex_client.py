@@ -77,8 +77,23 @@ def _call_vertex(grid_b64: str, cell_count: int, prompt_version: str, job_id: st
     }
 
 
+def _get_cloud_run_id_token(audience: str) -> str | None:
+    """
+    Fetch a Google-signed OIDC identity token for Cloud Run service-to-service auth.
+    Returns None in local dev (no metadata server available).
+    """
+    try:
+        import google.auth.transport.requests
+        import google.oauth2.id_token
+        auth_req = google.auth.transport.requests.Request()
+        return google.oauth2.id_token.fetch_id_token(auth_req, audience)
+    except Exception as exc:
+        logger.debug("oidc_token_unavailable", reason=str(exc))
+        return None
+
+
 def _call_local_vllm(grid_b64: str, cell_count: int, prompt_version: str, job_id: str) -> dict:
-    """Local dev fallback using OpenAI-compatible vLLM API."""
+    """Call Cloud Run vLLM service using OpenAI-compatible API with IAM auth."""
     import httpx
     system_prompt = _load_system_prompt()
     payload = {
@@ -98,8 +113,20 @@ def _call_local_vllm(grid_b64: str, cell_count: int, prompt_version: str, job_id
         "top_logprobs": 3,
         "response_format": {"type": "json_object"},
     }
+    # Cloud Run requires an OIDC identity token when --no-allow-unauthenticated is set.
+    # fetch_id_token() uses the service account's metadata server on Cloud Run.
+    # Falls back gracefully to no auth in local dev (metadata server not available).
+    headers: dict = {}
+    id_token = _get_cloud_run_id_token(_LOCAL_VLLM_URL)
+    if id_token:
+        headers["Authorization"] = f"Bearer {id_token}"
+
     with httpx.Client(timeout=60.0) as client:
-        resp = client.post(f"{_LOCAL_VLLM_URL}/v1/chat/completions", json=payload)
+        resp = client.post(
+            f"{_LOCAL_VLLM_URL}/v1/chat/completions",
+            json=payload,
+            headers=headers,
+        )
         resp.raise_for_status()
     data = resp.json()
     choice = data["choices"][0]

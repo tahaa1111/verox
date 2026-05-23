@@ -1,6 +1,6 @@
 # =============================================================================
 # Medibox vLLM — Vertex AI custom container (DD-011)
-# Base: vLLM official with CUDA 12.1 + Python 3.11
+# Base: vLLM official with CUDA 12.x + Python 3.11
 # Conforms to Vertex AI custom-container prediction contract:
 #   Health: GET $AIP_HEALTH_ROUTE (default /health)
 #   Predict: POST $AIP_PREDICT_ROUTE (default /predict)
@@ -11,26 +11,31 @@ FROM vllm/vllm-openai:v0.6.6.post1
 ENV PYTHONUNBUFFERED=1 \
     AIP_HTTP_PORT=8080 \
     AIP_HEALTH_ROUTE=/health \
-    AIP_PREDICT_ROUTE=/predict
+    AIP_PREDICT_ROUTE=/predict \
+    HF_HUB_ENABLE_HF_TRANSFER=1
 
-# Runtime deps
+# Runtime deps — only curl needed for healthcheck; gcloud SDK not required
+# since the model is downloaded from HuggingFace Hub at startup.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl gnupg lsb-release \
-    && curl -sSL https://sdk.cloud.google.com | bash -s -- --disable-prompts \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-ENV PATH="/root/google-cloud-sdk/bin:${PATH}"
+# Upgrade transformers to >=4.47.0 — required for Qwen2.5-VL (qwen2_5_vl architecture).
+# v0.6.6 ships with transformers that lacks qwen2_5_vl in its CONFIG_MAPPING.
+# --force-reinstall bypasses any conflicting pin that would keep the old version.
+# CRITICAL: do NOT touch torch, autoawq, or the vLLM CUDA kernels — only transformers.
+RUN pip show transformers 2>&1 | grep -E "^(Name|Version)" && \
+    pip install --no-cache-dir --force-reinstall "transformers==4.47.3" && \
+    python3 -c "import transformers; v=transformers.__version__; print('transformers installed:', v); assert v.startswith('4.47'), f'UPGRADE FAILED: {v}'" && \
+    python3 -c "from transformers.models.auto.configuration_auto import CONFIG_MAPPING; assert 'qwen2_5_vl' in CONFIG_MAPPING, 'qwen2_5_vl NOT in CONFIG_MAPPING'; print('qwen2_5_vl: FOUND in CONFIG_MAPPING')"
 
+# Install wrapper server dependencies on top of vLLM image.
 RUN pip install --no-cache-dir \
-    qwen-vl-utils==0.0.8 \
-    fastapi==0.115.0 \
-    "uvicorn[standard]==0.30.6" \
-    httpx==0.27.2 \
-    structlog==24.4.0 \
-    Pillow==10.4.0
-# NOTE: autoawq is NOT installed here — vllm/vllm-openai already ships a
-# compatible version. Installing it again can override internal stubs and
-# cause "AttributeError: module 'awq' has no attribute 'quantize'" crashes.
+    "fastapi>=0.115.0,<0.120" \
+    "uvicorn[standard]>=0.30.6,<0.35" \
+    "httpx>=0.27.2,<0.30" \
+    "structlog>=24.4.0" \
+    "Pillow>=10.4.0,<12"
 
 WORKDIR /app
 
@@ -38,9 +43,11 @@ COPY services/vllm/ /app/services/vllm/
 COPY services/__init__.py /app/services/__init__.py
 
 # Health check matches Vertex AI health probe
-HEALTHCHECK --interval=30s --timeout=15s --start-period=300s --retries=5 \
+HEALTHCHECK --interval=30s --timeout=15s --start-period=600s --retries=10 \
     CMD curl -sf http://localhost:${AIP_HTTP_PORT}${AIP_HEALTH_ROUTE} || exit 1
 
 EXPOSE ${AIP_HTTP_PORT}
 
-ENTRYPOINT ["python", "-m", "services.vllm.server"]
+# Use shell form so $PATH is resolved at runtime (vLLM image uses conda Python).
+# Cloud Run injects PORT env var; Vertex AI uses AIP_HTTP_PORT — both default to 8080.
+ENTRYPOINT ["/bin/bash", "-c", "cd /app && exec python3 -m services.vllm.server"]

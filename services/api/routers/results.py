@@ -3,23 +3,55 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import secrets
 import uuid
 from datetime import datetime, timezone
 
+import redis.asyncio as aioredis
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.api.core.auth import get_current_user_ws, verify_firebase_token
+from services.api.core.auth import verify_firebase_token
+from services.api.core.config import get_settings
 from services.api.core.database import get_db
 from services.api.core.pii import decrypt_pii
 from services.api.models.job import Job
 from services.api.schemas.response import DISCLAIMER, JobPollResponse
 from services.api.ws.manager import HEARTBEAT_INTERVAL, ws_manager
 
+_WS_TOKEN_TTL = 30        # seconds — opaque token expires after 30s (single-use)
+_WS_TOKEN_PREFIX = "wstoken:"
+
 logger = structlog.get_logger(__name__)
 router = APIRouter()
+
+
+@router.post("/ws/token", status_code=200)
+async def ws_token(
+    claims: dict = Depends(verify_firebase_token),
+) -> dict:
+    """
+    Exchange a Firebase JWT for a short-lived (30s) opaque WebSocket token.
+    The frontend passes this opaque token in ?token= instead of the full Firebase JWT,
+    so the JWT never appears in server logs or browser history.
+    """
+    settings = get_settings()
+    opaque = secrets.token_urlsafe(32)
+    r = aioredis.from_url(settings.redis_url, decode_responses=True)
+    try:
+        await r.set(
+            f"{_WS_TOKEN_PREFIX}{opaque}",
+            json.dumps({"uid": claims.get("uid", claims.get("user_id", "")),
+                        "admin": claims.get("admin", False),
+                        "device_id": claims.get("device_id", "")}),
+            ex=_WS_TOKEN_TTL,
+        )
+    finally:
+        await r.aclose()
+    return {"ws_token": opaque, "expires_in": _WS_TOKEN_TTL}
 
 
 @router.get("/result/{job_id}")
@@ -63,10 +95,22 @@ async def websocket_result(
     job_id: str,
     token: str = Query(...),
 ):
-    # Authenticate
+    # Authenticate via short-lived opaque token (Redis lookup, single-use).
+    # Frontend must first call POST /v1/ws/token to exchange Firebase JWT → opaque token.
+    settings = get_settings()
+    r = aioredis.from_url(settings.redis_url, decode_responses=True)
     try:
-        claims = await get_current_user_ws(token)
-    except HTTPException:
+        key = f"{_WS_TOKEN_PREFIX}{token}"
+        raw = await r.getdel(key)   # single-use: deleted on first read
+    finally:
+        await r.aclose()
+
+    if not raw:
+        await websocket.close(code=4001)
+        return
+    try:
+        claims = json.loads(raw)
+    except Exception:
         await websocket.close(code=4001)
         return
 

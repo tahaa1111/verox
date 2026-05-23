@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api.core.auth import verify_firebase_token
 from services.api.core.config import get_settings
 from services.api.core.database import get_db
 from services.api.models.audit import AuditLog
@@ -92,7 +93,10 @@ async def camera_push(
 # ---------------------------------------------------------------------------
 
 @router.get("/camera/snapshot")
-async def camera_snapshot(device_id: str = _DEFAULT_DEVICE) -> dict:
+async def camera_snapshot(
+    device_id: str = _DEFAULT_DEVICE,
+    claims: dict = Depends(verify_firebase_token),
+) -> dict:
     """Return the latest frame from Redis. No auth — frame is just a JPEG crop."""
     r = aioredis.from_url(settings.redis_url, decode_responses=True)
     try:
@@ -117,6 +121,7 @@ async def camera_capture(
     request: Request,
     db: AsyncSession = Depends(get_db),
     device_id: str = _DEFAULT_DEVICE,
+    claims: dict = Depends(verify_firebase_token),
 ) -> CaptureResponse:
     """Capture the latest Pi frame, create a job, return job_id."""
     r = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -180,7 +185,10 @@ async def camera_capture(
 # ---------------------------------------------------------------------------
 
 @router.post("/camera/start", status_code=200)
-async def camera_start(device_id: str = _DEFAULT_DEVICE) -> dict:
+async def camera_start(
+    device_id: str = _DEFAULT_DEVICE,
+    claims: dict = Depends(verify_firebase_token),
+) -> dict:
     """Signal the Pi camera to start streaming. Pi polls /camera/command to receive this."""
     r = aioredis.from_url(settings.redis_url, decode_responses=True)
     try:
@@ -196,7 +204,10 @@ async def camera_start(device_id: str = _DEFAULT_DEVICE) -> dict:
 # ---------------------------------------------------------------------------
 
 @router.post("/camera/stop", status_code=200)
-async def camera_stop(device_id: str = _DEFAULT_DEVICE) -> dict:
+async def camera_stop(
+    device_id: str = _DEFAULT_DEVICE,
+    claims: dict = Depends(verify_firebase_token),
+) -> dict:
     """Signal the Pi camera to stop streaming."""
     r = aioredis.from_url(settings.redis_url, decode_responses=True)
     try:
