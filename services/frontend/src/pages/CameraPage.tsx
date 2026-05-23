@@ -81,15 +81,18 @@ export function CameraPage() {
   const seenJobRef = useRef<string | null>(null);   // track which job we already navigated to
   const navigate = useNavigate();
 
-  const stopPolling = useCallback(() => {
+  // Stop local polling only — does NOT send stop command to Pi.
+  // Pi keeps streaming until the user explicitly clicks Stop.
+  const stopPolling = useCallback((sendStopSignal = false) => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null; }
     setCameraState("idle");
     setStableProgress(0);
-    signalCameraStop().catch(() => {});
+    if (sendStopSignal) signalCameraStop().catch(() => {});
   }, []);
 
-  useEffect(() => () => stopPolling(), [stopPolling]);
+  // Only clear local timers on unmount — never auto-stop the Pi stream.
+  useEffect(() => () => stopPolling(false), [stopPolling]);
 
   const startCamera = async () => {
     setCameraState("streaming");
@@ -255,7 +258,7 @@ export function CameraPage() {
               Capture Now
             </button>
             <button
-              onClick={stopPolling}
+              onClick={() => stopPolling(true)}
               className="border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium px-4 py-2.5 rounded-xl text-sm transition-colors"
             >
               Stop
