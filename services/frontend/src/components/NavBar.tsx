@@ -1,5 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import clsx from "clsx";
+import { signOut } from "../firebase";
+import { useStore } from "../store";
 
 const links = [
   { to: "/", label: "Camera", exact: true },
@@ -8,6 +10,13 @@ const links = [
 
 export function NavBar() {
   const { pathname } = useLocation();
+  const setFirebaseToken = useStore((s) => s.setFirebaseToken);
+
+  const handleSignOut = async () => {
+    await signOut();
+    setFirebaseToken(null);
+  };
+
   return (
     <nav className="bg-white border-b border-gray-100 shadow-sm px-6 py-0 flex items-center gap-8 h-14">
       {/* Logo / brand */}
@@ -41,6 +50,18 @@ export function NavBar() {
             </Link>
           );
         })}
+
+        {/* Sign out */}
+        <button
+          onClick={handleSignOut}
+          title="Sign out"
+          className="ml-2 p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+          </svg>
+        </button>
       </div>
     </nav>
   );
