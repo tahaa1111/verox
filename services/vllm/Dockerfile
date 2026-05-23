@@ -25,9 +25,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # --force-reinstall bypasses any conflicting pin that would keep the old version.
 # CRITICAL: do NOT touch torch, autoawq, or the vLLM CUDA kernels — only transformers.
 RUN pip show transformers 2>&1 | grep -E "^(Name|Version)" && \
-    pip install --no-cache-dir --force-reinstall "transformers==4.47.1" && \
-    python3 -c "import transformers; v=transformers.__version__; print('transformers installed:', v); assert v.startswith('4.47'), f'UPGRADE FAILED: {v}'" && \
-    python3 -c "from transformers.models.auto.configuration_auto import CONFIG_MAPPING; assert 'qwen2_5_vl' in CONFIG_MAPPING, 'qwen2_5_vl NOT in CONFIG_MAPPING'; print('qwen2_5_vl: FOUND in CONFIG_MAPPING')"
+    pip install --no-cache-dir --force-reinstall "transformers==4.49.0" && \
+    python3 -c "import transformers; v=transformers.__version__; print('transformers installed:', v); assert v >= '4.49', f'UPGRADE FAILED: {v}'" && \
+    python3 -c "from transformers import Qwen2_5_VLConfig; print('Qwen2_5_VLConfig: FOUND', Qwen2_5_VLConfig)"
 
 # Install wrapper server dependencies on top of vLLM image.
 RUN pip install --no-cache-dir \
