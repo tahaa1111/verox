@@ -16,7 +16,7 @@ symspellpy==6.7.7
 # Uncomment when Vertex AI GPU is ready:
 # google-cloud-aiplatform==1.65.0
 google-cloud-storage==2.18.0
-# google-cloud-bigquery==3.25.0   # lazy import in _stream_to_bigquery, not needed at startup
+google-cloud-bigquery==3.25.0
 google-cloud-kms==2.24.0
 cryptography==43.0.1
 pydantic==2.8.2

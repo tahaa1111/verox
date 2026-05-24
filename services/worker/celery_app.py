@@ -6,8 +6,8 @@ import os
 
 from celery import Celery
 
-# REDIS_URL is set as a plain env var by the deploy scripts (not a secret ref).
-# CELERY_BROKER_URL / CELERY_RESULT_BACKEND are optional secret refs; fall back
+# REDIS_URL is injected from the medibox-redis-url Secret Manager secret.
+# CELERY_BROKER_URL / CELERY_RESULT_BACKEND are separate secret refs; fall back
 # to REDIS_URL (db=0 for broker, db=1 for backend) when they are absent.
 _redis_base = os.getenv("REDIS_URL", "redis://localhost:6379")
 # Strip trailing db index from REDIS_URL so we can append /0 and /1 cleanly
@@ -70,3 +70,46 @@ try:
     import services.worker.tasks.postprocessing   # noqa: F401, E402
 except ImportError:
     pass  # Running in API container — task modules not needed for sending
+
+
+# ---------------------------------------------------------------------------
+# Pre-warm all lazy-init caches when the worker process is ready.
+# Builds the spaCy NER pipeline, spell dictionary, and drug normalizer indexes
+# at startup so the FIRST job never pays the cold-build cost (~20 min cold).
+# ---------------------------------------------------------------------------
+from celery.signals import worker_ready  # noqa: E402
+
+
+@worker_ready.connect
+def _pre_warm_caches(sender, **kwargs):  # noqa: ANN001
+    """Build all @lru_cache heavy indexes before the first task arrives."""
+    import logging
+    log = logging.getLogger("medibox.worker.prewarm")
+
+    try:
+        from services.worker.utils.medical_ner import _build_nlp
+        _build_nlp()
+        log.info("pre_warm: NER pipeline ready")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("pre_warm: NER failed — %s", exc)
+
+    try:
+        from services.worker.utils.medical_spellcheck import _build_spell
+        _build_spell()
+        log.info("pre_warm: spell dictionary ready")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("pre_warm: spell failed — %s", exc)
+
+    try:
+        from services.worker.utils.drug_normalizer import _build_indexes
+        _build_indexes()
+        log.info("pre_warm: drug normalizer indexes ready")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("pre_warm: drug normalizer failed — %s", exc)
+
+    try:
+        from services.worker.utils.specialty_validator import _load_drug_descriptions
+        _load_drug_descriptions()
+        log.info("pre_warm: specialty drug descriptions ready")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("pre_warm: specialty validator failed — %s", exc)
