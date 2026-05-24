@@ -90,15 +90,24 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — frontend on same domain in prod, localhost:5173 for dev
+# CORS — production: only the real frontend origins.
+#        development: also allow Vite dev server on localhost.
+_prod_origins = [
+    f"https://{settings.domain}",
+    "https://medibox-frontend-5w7o5tyr2q-uc.a.run.app",
+]
+_dev_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+_cors_origins = (
+    _prod_origins + _dev_origins
+    if settings.environment != "production"
+    else _prod_origins
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        f"https://{settings.domain}",
-        "https://medibox-frontend-5w7o5tyr2q-uc.a.run.app",
-        "http://localhost:5173",
-        "http://localhost:3000",
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Correlation-ID"],
@@ -113,6 +122,12 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # CSP: this service returns JSON only — block all resource loading/execution.
+    # 'frame-ancestors none' replaces X-Frame-Options for modern browsers.
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'none'; frame-ancestors 'none'"
+    )
+    response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
     return response
 
 
