@@ -27,7 +27,6 @@ Output added to result dict:
 
 import json
 import os
-import re
 from functools import lru_cache
 from typing import Optional
 

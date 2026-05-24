@@ -35,8 +35,8 @@ MATCH_THRESHOLD = 80   # slightly lower than drug threshold — handwritten name
 
 
 @lru_cache(maxsize=1)
-def _build_indexes() -> tuple[list[str], dict]:
-    """Returns (names_list, registry). Cached after first call."""
+def _build_indexes() -> tuple[list[str], dict, list[str]]:
+    """Returns (names_lower, registry, names_original). Cached after first call."""
     names_path    = os.path.join(REFERANCES_DIR, "doctor_names.json")
     registry_path = os.path.join(REFERANCES_DIR, "doctor_registry.json")
 
