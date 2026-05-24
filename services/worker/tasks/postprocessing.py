@@ -1,15 +1,17 @@
 """
 Postprocessing pipeline (spec §5.3).
 Steps in order:
-1. JSON repair (json-repair library)
-2. Schema validation (Pydantic v2)
-3. Drug name normalization   (Tunisian AMM formulary — liste_amm.xls)
-4. Doctor name normalization (Tunisian provider registry — TAHA.xlsx)
-5. Date normalization (French + Arabic → ISO 8601)
-6. Dosage normalization (regex pipeline)
-7. Hallucination filter (unregistered drugs → requires_review)
-8. Confidence calibration (logprob + formulary score + completeness, DD-007)
-9. Audit trail construction
+1.  JSON repair (json-repair library)
+2.  Schema validation (Pydantic v2)
+2.5 Spell correction (SymSpell + AMM vocabulary) — fixes OCR typos before fuzzy match
+3.  Drug name normalization   (Tunisian AMM formulary — liste_amm.xls)
+4.  Doctor name normalization (Tunisian provider registry — TAHA.xlsx)
+4c. NER validation (spaCy EntityRuler) — confirms entities + scans for missed drugs
+5.  Date normalization (French + Arabic → ISO 8601)
+6.  Dosage normalization (regex pipeline)
+7.  Hallucination filter (unregistered drugs → requires_review)
+8.  Confidence calibration (logprob + formulary score + completeness, DD-007)
+9.  Audit trail construction
 """
 
 import json
@@ -21,6 +23,8 @@ import structlog
 
 from services.worker.utils.drug_normalizer import normalize_drug_name
 from services.worker.utils.doctor_normalizer import normalize_doctor_name
+from services.worker.utils.medical_spellcheck import spell_correct_drug
+from services.worker.utils.medical_ner import run_ner_validation
 
 logger = structlog.get_logger(__name__)
 
@@ -114,13 +118,31 @@ def run_postprocessing(
     # ---- Step 2: Schema validation (lenient — we fill defaults) ----
     result = _normalize_schema(parsed, job_id, session_id)
 
+    # ---- Step 2.5: Spell correction on extracted drug names ----
+    # Fix OCR typos in drug names BEFORE sending to the AMM fuzzy matcher.
+    # Original OCR value is always preserved in drug_name; corrected form stored
+    # in drug_name_spell_corrected and used as fuzzy-match input.
+    spell_correction_count = 0
+    for med in result.get("medications", []):
+        raw = med.get("drug_name", "") or ""
+        corrected, was_corrected, edit_dist = spell_correct_drug(raw)
+        med["drug_name_spell_corrected"] = corrected if was_corrected else None
+        med["spell_correction_distance"] = edit_dist if was_corrected else 0
+        if was_corrected:
+            spell_correction_count += 1
+            log.debug("spell_correction", original=raw, corrected=corrected, distance=edit_dist)
+
+    if spell_correction_count:
+        log.info("spell_corrections_applied", count=spell_correction_count)
+
     # ---- Step 3: Medication enrichment against AMM registry ----
     # OCR extracts all detected text. References enrich and validate — nothing is dropped.
     # Unmatched drugs stay in the list but are flagged requires_review=True.
     review_reasons: list[str] = []
 
     for med in result.get("medications", []):
-        raw_drug = med.get("drug_name", "")
+        # Use spell-corrected name as fuzzy-match input when available (better match quality)
+        raw_drug = med.get("drug_name_spell_corrected") or med.get("drug_name", "")
         inn, formulary_score, registry_meta = normalize_drug_name(raw_drug)
         med["drug_name_normalized"] = inn
         med["formulary_match_score"] = formulary_score
@@ -182,6 +204,25 @@ def run_postprocessing(
         result["doctor_name_normalized"] = None
         result["doctor_match_score"]     = 0.0
         result["doctor_info"]            = {}
+
+    # ---- Step 4c: NER validation ----
+    # Run named-entity recognition over medication names and raw extracted text.
+    # • confirmed    — drug names that matched AMM entity patterns (high confidence)
+    # • unconfirmed  — drug names with no NER support (possible OCR noise or novel drug)
+    # • missed_candidates — drug-like text found in raw_text but NOT in medications list
+    #   → flagged for pharmacist review (model may have missed them)
+    ner_result = run_ner_validation(
+        medications=result.get("medications", []),
+        raw_text=result.get("extracted_raw_text"),
+        doctor_name=result.get("doctor_name"),
+    )
+    result["ner_validation"] = ner_result
+
+    if ner_result.get("ner_added_review_reason"):
+        review_reasons.append("ner_missed_drug_candidates")
+
+    if not ner_result.get("doctor_name_valid", True) and result.get("doctor_name"):
+        review_reasons.append("doctor_name_suspicious")
 
     # ---- Step 5: Clean PII nulls ----
     result["patient_name"] = _clean_null(result.get("patient_name"))
@@ -310,8 +351,15 @@ def _normalize_schema(parsed: dict, job_id: str, session_id: str) -> dict:
         if isinstance(m, dict) and m.get("drug_name"):
             meds.append({
                 "drug_name": str(m.get("drug_name", "")),
+                # Spell correction (step 2.5)
+                "drug_name_spell_corrected": None,
+                "spell_correction_distance": 0,
+                # AMM fuzzy match (step 3)
                 "drug_name_normalized": None,
                 "formulary_match_score": 0.0,
+                "amm_info": {},
+                "requires_review": False,
+                # Dosage
                 "dosage": m.get("dosage"),
                 "dosage_normalized": None,
                 "frequency": m.get("frequency"),
@@ -320,7 +368,6 @@ def _normalize_schema(parsed: dict, job_id: str, session_id: str) -> dict:
                 "warnings": m.get("warnings"),
                 "track_id": int(m.get("track_id", 0)),
                 "field_confidences": {"drug_name": 0.0, "dosage": 0.0, "frequency": 0.0},
-                "requires_review": False,
             })
     return {
         "job_id": job_id,
@@ -339,6 +386,8 @@ def _normalize_schema(parsed: dict, job_id: str, session_id: str) -> dict:
         "doctor_name_normalized":  None,
         "doctor_match_score":      0.0,
         "doctor_info":             {},
+        # NER validation (populated in step 4c)
+        "ner_validation":          {},
     }
 
 

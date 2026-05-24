@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY services/worker/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt && \
-    python3 -c "import celery, redis, psycopg2, structlog, rapidfuzz, json_repair, httpx, google.cloud.storage, PIL, pydantic, pydantic_settings, tenacity, cryptography, dateutil, json_repair"
+    python3 -c "import celery, redis, psycopg2, structlog, rapidfuzz, json_repair, httpx, google.cloud.storage, PIL, pydantic, pydantic_settings, tenacity, cryptography, dateutil, json_repair, spacy, symspellpy"
 
 COPY services/worker/ /app/services/worker/
 COPY services/vllm/prompts/ /app/services/vllm/prompts/
@@ -32,6 +32,8 @@ import sys; sys.path.insert(0, '/app'); \
 import services.worker.celery_app; \
 import services.worker.tasks.inference; \
 import services.worker.tasks.postprocessing; \
+import services.worker.utils.medical_spellcheck; \
+import services.worker.utils.medical_ner; \
 print('app pre-warm complete')" && \
     python3 -m compileall -q /app/services/worker/ /app/services/api/core/ || true
 

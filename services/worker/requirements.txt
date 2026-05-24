@@ -8,6 +8,10 @@ python-dateutil==2.9.0
 structlog==24.4.0
 tenacity==9.0.0
 httpx==0.27.2
+# NER (EntityRuler — no model download needed, uses spacy.blank("fr") only)
+spacy==3.7.4
+# Spell correction (custom AMM medical dictionary)
+symspellpy==6.7.7
 # google-cloud-aiplatform installed lazily at inference time (VERTEX_ENDPOINT_ID needed)
 # Uncomment when Vertex AI GPU is ready:
 # google-cloud-aiplatform==1.65.0
