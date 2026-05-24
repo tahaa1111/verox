@@ -34,6 +34,7 @@ import services.worker.tasks.inference; \
 import services.worker.tasks.postprocessing; \
 import services.worker.utils.medical_spellcheck; \
 import services.worker.utils.medical_ner; \
+import services.worker.utils.specialty_validator; \
 print('app pre-warm complete')" && \
     python3 -m compileall -q /app/services/worker/ /app/services/api/core/ || true
 

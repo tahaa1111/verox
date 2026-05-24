@@ -7,6 +7,8 @@ Steps in order:
 3.  Drug name normalization   (Tunisian AMM formulary — liste_amm.xls)
 4.  Doctor name normalization (Tunisian provider registry — TAHA.xlsx)
 4c. NER validation (spaCy EntityRuler) — confirms entities + scans for missed drugs
+4d. Specialty–drug coherence check — cross-references each drug against the doctor's
+    specialty using AMM class/subclass + drug_descriptions.json indications
 5.  Date normalization (French + Arabic → ISO 8601)
 6.  Dosage normalization (regex pipeline)
 7.  Hallucination filter (unregistered drugs → requires_review)
@@ -25,6 +27,10 @@ from services.worker.utils.drug_normalizer import normalize_drug_name
 from services.worker.utils.doctor_normalizer import normalize_doctor_name
 from services.worker.utils.medical_spellcheck import spell_correct_drug
 from services.worker.utils.medical_ner import run_ner_validation
+from services.worker.utils.specialty_validator import (
+    validate_specialty_coherence,
+    enrich_medications_with_specialty,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -224,6 +230,33 @@ def run_postprocessing(
     if not ner_result.get("doctor_name_valid", True) and result.get("doctor_name"):
         review_reasons.append("doctor_name_suspicious")
 
+    # ---- Step 4d: Specialty–drug coherence check ----
+    # Cross-reference each drug's AMM class/subclass against the prescribing
+    # doctor's specialty.  Drugs outside the specialty's typical scope are
+    # flagged as "mismatch" so a pharmacist can verify the prescription.
+    # Requires doctor_info.specialite — present only when doctor was matched
+    # against the TAHA registry in step 4b.
+    doctor_specialty = (result.get("doctor_info") or {}).get("specialite") or None
+    specialty_result = validate_specialty_coherence(
+        medications=result.get("medications", []),
+        specialty=doctor_specialty,
+        doctor_name=result.get("doctor_name"),
+    )
+    # Merge specialty scores directly into each medication dict
+    enrich_medications_with_specialty(result.get("medications", []), specialty_result)
+    # Surface aggregate specialty score at the result level
+    result["prescription_specialty_score"] = specialty_result.get("prescription_score", 1.0)
+    result["specialty_checked"] = specialty_result.get("specialty_checked", False)
+    result["specialty_normalized"] = specialty_result.get("specialty_normalized")
+
+    if specialty_result.get("any_mismatch"):
+        review_reasons.append("specialty_drug_mismatch")
+        log.info(
+            "specialty_mismatch",
+            specialty=specialty_result.get("specialty_normalized"),
+            prescription_score=specialty_result.get("prescription_score"),
+        )
+
     # ---- Step 5: Clean PII nulls ----
     result["patient_name"] = _clean_null(result.get("patient_name"))
     result["doctor_name"]  = _clean_null(result.get("doctor_name"))
@@ -359,6 +392,10 @@ def _normalize_schema(parsed: dict, job_id: str, session_id: str) -> dict:
                 "formulary_match_score": 0.0,
                 "amm_info": {},
                 "requires_review": False,
+                # Specialty coherence (step 4d)
+                "specialty_match":       "neutral",
+                "specialty_match_score": 0.6,
+                "specialty_note":        "",
                 # Dosage
                 "dosage": m.get("dosage"),
                 "dosage_normalized": None,
@@ -388,6 +425,10 @@ def _normalize_schema(parsed: dict, job_id: str, session_id: str) -> dict:
         "doctor_info":             {},
         # NER validation (populated in step 4c)
         "ner_validation":          {},
+        # Specialty coherence (populated in step 4d)
+        "prescription_specialty_score": 1.0,
+        "specialty_checked":            False,
+        "specialty_normalized":         None,
     }
 
 
