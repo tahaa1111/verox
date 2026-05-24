@@ -12,6 +12,7 @@ Routes:
 """
 from __future__ import annotations
 
+import hmac
 import uuid
 import redis.asyncio as aioredis
 import structlog
@@ -96,7 +97,7 @@ async def camera_push(
     x_camera_secret: str = Header(alias="X-Camera-Secret", default=""),
 ) -> Response:
     """Pi posts a JPEG frame + stable_progress; stored in Redis."""
-    if x_camera_secret != settings.camera_secret:
+    if not hmac.compare_digest(x_camera_secret, settings.camera_secret):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid camera secret")
 
     r = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -122,7 +123,7 @@ async def camera_push_job(
     x_camera_secret: str = Header(alias="X-Camera-Secret", default=""),
 ) -> Response:
     """Pi pushes the job_id it received from /v1/submit so the frontend can navigate to results."""
-    if x_camera_secret != settings.camera_secret:
+    if not hmac.compare_digest(x_camera_secret, settings.camera_secret):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid camera secret")
 
     r = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -284,7 +285,7 @@ async def camera_command(
     x_camera_secret: str = Header(alias="X-Camera-Secret", default=""),
 ) -> dict:
     """Pi polls for start/stop commands from the frontend."""
-    if x_camera_secret != settings.camera_secret:
+    if not hmac.compare_digest(x_camera_secret, settings.camera_secret):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid camera secret")
     r = aioredis.from_url(settings.redis_url, decode_responses=True)
     try:
