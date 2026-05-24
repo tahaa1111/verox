@@ -436,7 +436,7 @@ add_table(doc,
         [cell("medibox-firebase-admin-json"),  DONE, cell("")],
         [cell("medibox-database-url"),         DONE, cell("")],
         [cell("medibox-database-url-sync"),    DONE, cell("")],
-        [cell("medibox-camera-secret"),        DONE, cell("Value: medibox-camera-prod-2026 (v2)")],
+        [cell("medibox-camera-secret"),        DONE, cell("Stored in GCP Secret Manager — not shown here")],
     ],
     col_widths=[3.0, 1.4, 2.1]
 )

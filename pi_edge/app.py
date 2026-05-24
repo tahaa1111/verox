@@ -54,9 +54,10 @@ def _load_camera_secret() -> str:
                 return secret
         except Exception:
             pass
-    # 3. Dev fallback (never reaches production where edge.toml is present)
-    print("[config] WARNING: using dev camera secret — set CAMERA_SECRET env var in production")
-    return "medibox-camera-prod-2026"
+    # 3. Dev fallback — NEVER deploy to production with this value.
+    # Production always has /etc/medibox/edge.toml or CAMERA_SECRET env var set.
+    print("[config] WARNING: using dev camera secret — set CAMERA_SECRET env var or edge.toml in production")
+    return "CHANGEME-dev-only"
 
 CAMERA_SECRET = _load_camera_secret()
 
