@@ -1,5 +1,5 @@
 {
-  "displayName": "Medibox — Cost Monitoring",
+  "displayName": "Medibox \u00e2\u20ac\u201d Cost Monitoring",
   "mosaicLayout": {
     "columns": 12,
     "tiles": [
@@ -7,7 +7,7 @@
         "width": 6,
         "height": 3,
         "widget": {
-          "title": "Vertex AI Endpoint — GPU Duty Cycle (T4 cost driver)",
+          "title": "Vertex AI Endpoint \u00e2\u20ac\u201d GPU Duty Cycle (T4 cost driver)",
           "xyChart": {
             "dataSets": [
               {
@@ -25,8 +25,10 @@
                 "legendTemplate": "GPU duty cycle %"
               }
             ],
-            "thresholds": [{"value": 90, "color": "RED", "direction": "ABOVE", "label": "Alert threshold 90%"}],
-            "yAxis": {"label": "%", "scale": "LINEAR"}
+            "yAxis": {
+              "label": "%",
+              "scale": "LINEAR"
+            }
           }
         }
       },
@@ -35,7 +37,7 @@
         "width": 6,
         "height": 3,
         "widget": {
-          "title": "Cloud Run — Billable Container Instance Hours",
+          "title": "Cloud Run \u00e2\u20ac\u201d Billable Container Instance Hours",
           "xyChart": {
             "dataSets": [
               {
@@ -67,7 +69,10 @@
                 "legendTemplate": "Worker instance-hours"
               }
             ],
-            "yAxis": {"label": "instance-seconds", "scale": "LINEAR"}
+            "yAxis": {
+              "label": "instance-seconds",
+              "scale": "LINEAR"
+            }
           }
         }
       },
@@ -76,7 +81,7 @@
         "width": 6,
         "height": 3,
         "widget": {
-          "title": "BigQuery — Bytes Scanned (controls query cost)",
+          "title": "BigQuery \u00e2\u20ac\u201d Bytes Scanned (controls query cost)",
           "xyChart": {
             "dataSets": [
               {
@@ -94,7 +99,10 @@
                 "legendTemplate": "BQ tables"
               }
             ],
-            "yAxis": {"label": "tables", "scale": "LINEAR"}
+            "yAxis": {
+              "label": "tables",
+              "scale": "LINEAR"
+            }
           }
         }
       },
@@ -104,7 +112,7 @@
         "width": 6,
         "height": 3,
         "widget": {
-          "title": "GCS — Storage Used (bytes)",
+          "title": "GCS \u00e2\u20ac\u201d Storage Used (bytes)",
           "xyChart": {
             "dataSets": [
               {
@@ -115,7 +123,9 @@
                       "alignmentPeriod": "3600s",
                       "perSeriesAligner": "ALIGN_MEAN",
                       "crossSeriesReducer": "REDUCE_SUM",
-                      "groupByFields": ["resource.label.bucket_name"]
+                      "groupByFields": [
+                        "resource.label.bucket_name"
+                      ]
                     }
                   }
                 },
@@ -123,7 +133,10 @@
                 "legendTemplate": "${resource.label.bucket_name}"
               }
             ],
-            "yAxis": {"label": "bytes", "scale": "LINEAR"}
+            "yAxis": {
+              "label": "bytes",
+              "scale": "LINEAR"
+            }
           }
         }
       },
@@ -132,7 +145,7 @@
         "width": 4,
         "height": 3,
         "widget": {
-          "title": "Cloud Run API — Request Count (billing proxy)",
+          "title": "Cloud Run API \u00e2\u20ac\u201d Request Count (billing proxy)",
           "xyChart": {
             "dataSets": [
               {
@@ -143,7 +156,9 @@
                       "alignmentPeriod": "3600s",
                       "perSeriesAligner": "ALIGN_SUM",
                       "crossSeriesReducer": "REDUCE_SUM",
-                      "groupByFields": ["resource.label.service_name"]
+                      "groupByFields": [
+                        "resource.label.service_name"
+                      ]
                     }
                   }
                 },
@@ -151,7 +166,10 @@
                 "legendTemplate": "${resource.label.service_name}"
               }
             ],
-            "yAxis": {"label": "requests/hr", "scale": "LINEAR"}
+            "yAxis": {
+              "label": "requests/hr",
+              "scale": "LINEAR"
+            }
           }
         }
       },
@@ -161,7 +179,7 @@
         "width": 4,
         "height": 3,
         "widget": {
-          "title": "Cloud SQL — DB size (bytes)",
+          "title": "Cloud SQL \u00e2\u20ac\u201d DB size (bytes)",
           "xyChart": {
             "dataSets": [
               {
@@ -179,7 +197,10 @@
                 "legendTemplate": "DB disk bytes"
               }
             ],
-            "yAxis": {"label": "bytes", "scale": "LINEAR"}
+            "yAxis": {
+              "label": "bytes",
+              "scale": "LINEAR"
+            }
           }
         }
       },
@@ -189,7 +210,7 @@
         "width": 4,
         "height": 3,
         "widget": {
-          "title": "Secret Manager — Access Count (auditing)",
+          "title": "Secret Manager \u00e2\u20ac\u201d Access Count (auditing)",
           "xyChart": {
             "dataSets": [
               {
@@ -207,7 +228,10 @@
                 "legendTemplate": "Secret accesses/hr"
               }
             ],
-            "yAxis": {"label": "accesses", "scale": "LINEAR"}
+            "yAxis": {
+              "label": "accesses",
+              "scale": "LINEAR"
+            }
           }
         }
       },
@@ -216,9 +240,9 @@
         "width": 12,
         "height": 4,
         "widget": {
-          "title": "Budget Alert — Monthly Spend Forecast (USD)",
+          "title": "Budget Alert \u00e2\u20ac\u201d Monthly Spend Forecast (USD)",
           "text": {
-            "content": "## Budget Thresholds\n\nSet via `gcloud billing budgets create`:\n\n| Threshold | Action |\n|-----------|--------|\n| $250 | Email alert (Vertex endpoint warming) |\n| $350 | Email alert (above baseline) |\n| $500 | Email + Pub/Sub → pause Vertex endpoint |\n\n**Idle baseline: ~$317/month** (10 pharmacies: ~$337, 100 pharmacies: ~$1,009)\n\nVertex AI T4 endpoint cannot scale to zero (DD-001): $252/month floor.\nRun `scripts/pause_endpoint.sh` to save ~$252/month when system is not in use.\n\n**Billing dashboard**: Cloud Console → Billing → Reports → filter by project.",
+            "content": "## Budget Thresholds\n\nSet via `gcloud billing budgets create`:\n\n| Threshold | Action |\n|-----------|--------|\n| $250 | Email alert (Vertex endpoint warming) |\n| $350 | Email alert (above baseline) |\n| $500 | Email + Pub/Sub \u00e2\u2020\u2019 pause Vertex endpoint |\n\n**Idle baseline: ~$317/month** (10 pharmacies: ~$337, 100 pharmacies: ~$1,009)\n\nVertex AI T4 endpoint cannot scale to zero (DD-001): $252/month floor.\nRun `scripts/pause_endpoint.sh` to save ~$252/month when system is not in use.\n\n**Billing dashboard**: Cloud Console \u00e2\u2020\u2019 Billing \u00e2\u2020\u2019 Reports \u00e2\u2020\u2019 filter by project.",
             "format": "MARKDOWN"
           }
         }

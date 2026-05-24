@@ -1,5 +1,5 @@
 {
-  "displayName": "Medibox — MLOps Pipeline",
+  "displayName": "Medibox \u00e2\u20ac\u201d MLOps Pipeline",
   "mosaicLayout": {
     "columns": 12,
     "tiles": [
@@ -7,7 +7,7 @@
         "width": 6,
         "height": 3,
         "widget": {
-          "title": "Vertex AI Pipeline — Run Duration (minutes)",
+          "title": "Vertex AI Pipeline \u00e2\u20ac\u201d Run Duration (minutes)",
           "xyChart": {
             "dataSets": [
               {
@@ -25,7 +25,10 @@
                 "legendTemplate": "Pipeline run duration"
               }
             ],
-            "yAxis": {"label": "minutes", "scale": "LINEAR"}
+            "yAxis": {
+              "label": "minutes",
+              "scale": "LINEAR"
+            }
           }
         }
       },
@@ -52,7 +55,10 @@
                 "legendTemplate": "GPU duty cycle %"
               }
             ],
-            "yAxis": {"label": "%", "scale": "LINEAR"}
+            "yAxis": {
+              "label": "%",
+              "scale": "LINEAR"
+            }
           }
         }
       },
@@ -79,8 +85,10 @@
                 "legendTemplate": "drug_f1"
               }
             ],
-            "thresholds": [{"value": 0.80, "color": "RED", "direction": "BELOW", "label": "Fail threshold 0.80"}],
-            "yAxis": {"label": "F1 score", "scale": "LINEAR"}
+            "yAxis": {
+              "label": "F1 score",
+              "scale": "LINEAR"
+            }
           }
         }
       },
@@ -108,8 +116,10 @@
                 "legendTemplate": "json_validity_rate"
               }
             ],
-            "thresholds": [{"value": 0.995, "color": "RED", "direction": "BELOW", "label": "Fail threshold 0.995"}],
-            "yAxis": {"label": "rate", "scale": "LINEAR"}
+            "yAxis": {
+              "label": "rate",
+              "scale": "LINEAR"
+            }
           }
         }
       },
@@ -137,7 +147,10 @@
                 "legendTemplate": "rare_drug_accuracy"
               }
             ],
-            "yAxis": {"label": "accuracy", "scale": "LINEAR"}
+            "yAxis": {
+              "label": "accuracy",
+              "scale": "LINEAR"
+            }
           }
         }
       },
@@ -146,7 +159,7 @@
         "width": 6,
         "height": 3,
         "widget": {
-          "title": "Vertex AI Model Registry — Models Uploaded (cumulative)",
+          "title": "Vertex AI Model Registry \u00e2\u20ac\u201d Models Uploaded (cumulative)",
           "xyChart": {
             "dataSets": [
               {
@@ -164,7 +177,10 @@
                 "legendTemplate": "Deployed model versions"
               }
             ],
-            "yAxis": {"label": "count", "scale": "LINEAR"}
+            "yAxis": {
+              "label": "count",
+              "scale": "LINEAR"
+            }
           }
         }
       },
@@ -185,7 +201,9 @@
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_MEAN",
                       "crossSeriesReducer": "REDUCE_MEAN",
-                      "groupByFields": ["metric.label.model_id"]
+                      "groupByFields": [
+                        "metric.label.model_id"
+                      ]
                     }
                   }
                 },
@@ -193,7 +211,10 @@
                 "legendTemplate": "Traffic % by model"
               }
             ],
-            "yAxis": {"label": "%", "scale": "LINEAR"}
+            "yAxis": {
+              "label": "%",
+              "scale": "LINEAR"
+            }
           }
         }
       },
@@ -202,7 +223,7 @@
         "width": 12,
         "height": 3,
         "widget": {
-          "title": "Training Data Volume — Correction Samples Ingested per Day",
+          "title": "Training Data Volume \u00e2\u20ac\u201d Correction Samples Ingested per Day",
           "xyChart": {
             "dataSets": [
               {
@@ -220,7 +241,10 @@
                 "legendTemplate": "Daily corrections (training data)"
               }
             ],
-            "yAxis": {"label": "count", "scale": "LINEAR"}
+            "yAxis": {
+              "label": "count",
+              "scale": "LINEAR"
+            }
           }
         }
       }
