@@ -50,7 +50,14 @@ OUTPUT SCHEMA  (return exactly this structure)
     }
   ],
   "additional_notes":   "any other visible text — null if absent",
-  "extracted_raw_text": "verbatim transcription of ALL visible text in the image",
+  "extracted_raw_text": "REQUIRED — verbatim transcription of ALL visible text in the image, even if not a prescription. Never leave empty.",
+  "cell_texts": [
+    {
+      "cell": 1,
+      "text": "verbatim text from this cell ONLY — copy every word you can read",
+      "model_confidence": 0.0
+    }
+  ],
   "overall_confidence": 0.0
 }
 
@@ -85,7 +92,11 @@ OUTPUT: {"prescription_id":null,"patient":{"name":"فاطمة","last_name":"ال
 
 EXAMPLE 3 — Low quality partial crop
 INPUT : [cell 1: blurry crop, partial text only]
-OUTPUT: {"prescription_id":null,"patient":{"name":null,"last_name":null,"address":null,"profession":null},"doctor":{"name":null,"stamp":null},"issue_date":null,"medications":[{"drug_name":"Metformine","dosage":"850 mg","frequency":null,"duration":null,"quantity":null,"instructions":null,"warnings":null,"cnam":false,"track_id":1}],"additional_notes":null,"extracted_raw_text":"Metformine 850","overall_confidence":0.30}
+OUTPUT: {"prescription_id":null,"patient":{"name":null,"last_name":null,"address":null,"profession":null},"doctor":{"name":null,"stamp":null},"issue_date":null,"medications":[{"drug_name":"Metformine","dosage":"850 mg","frequency":null,"duration":null,"quantity":null,"instructions":null,"warnings":null,"cnam":false,"track_id":1}],"additional_notes":null,"extracted_raw_text":"Metformine 850","cell_texts":[{"cell":1,"text":"Metformine 850","model_confidence":0.30}],"overall_confidence":0.30}
+
+EXAMPLE 4 — Non-prescription image (unrelated text)
+INPUT : [cell 1: image with unrelated text]
+OUTPUT: {"prescription_id":null,"patient":{"name":null,"last_name":null,"address":null,"profession":null},"doctor":{"name":null,"stamp":null},"issue_date":null,"medications":[],"additional_notes":null,"extracted_raw_text":"[all text visible in the image copied verbatim]","cell_texts":[{"cell":1,"text":"[all text from cell 1 copied verbatim]","model_confidence":0.40}],"overall_confidence":0.05}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Extract the prescription data from the image and return ONLY the JSON object.

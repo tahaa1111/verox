@@ -3,19 +3,25 @@ import clsx from "clsx";
 import { signOut } from "../firebase";
 import { useStore } from "../store";
 
-const links = [
-  { to: "/", label: "Camera", exact: true },
-  { to: "/admin", label: "Admin", exact: false },
-];
-
 export function NavBar() {
   const { pathname } = useLocation();
   const setFirebaseToken = useStore((s) => s.setFirebaseToken);
+  const setIsAdmin = useStore((s) => s.setIsAdmin);
+  const isAdmin = useStore((s) => s.isAdmin);
+  const jobQueue = useStore((s) => s.jobQueue);
 
   const handleSignOut = async () => {
     await signOut();
     setFirebaseToken(null);
+    setIsAdmin(false);
   };
+
+  // Regular operators see Camera + History. Admin users additionally see Admin.
+  const links = [
+    { to: "/", label: "Camera", exact: true },
+    { to: "/history", label: "History", exact: false },
+    ...(isAdmin ? [{ to: "/admin", label: "Admin", exact: false }] : []),
+  ];
 
   return (
     <nav className="bg-white border-b border-gray-100 shadow-sm px-6 py-0 flex items-center gap-8 h-14">
@@ -50,6 +56,21 @@ export function NavBar() {
             </Link>
           );
         })}
+
+        {/* Queue indicator — shows on every page when jobs are processing */}
+        {jobQueue.length > 0 && (
+          <Link
+            to="/queue"
+            title="View scan queue"
+            className="ml-1 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-50 text-brand-700 font-medium text-sm hover:bg-brand-100 transition-colors"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-500 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-600" />
+            </span>
+            {jobQueue.length} in queue
+          </Link>
+        )}
 
         {/* Sign out */}
         <button

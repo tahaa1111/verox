@@ -11,6 +11,7 @@ import { useStore } from "../store";
 export function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const setFirebaseToken = useStore((s) => s.setFirebaseToken);
@@ -25,14 +26,22 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
       setFirebaseToken(token);
       onLogin();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Sign-in failed";
+      const msg = e instanceof Error ? e.message : String(e);
       // Make Firebase error messages user-friendly
       if (msg.includes("invalid-credential") || msg.includes("wrong-password") || msg.includes("user-not-found")) {
         setError("Invalid email or password.");
       } else if (msg.includes("too-many-requests")) {
         setError("Too many attempts. Please try again later.");
+      } else if (msg.includes("network-request-failed")) {
+        setError("Network error — check your connection.");
+      } else if (msg.includes("api-key") || msg.includes("api_key") || msg.includes("INVALID_API_KEY")) {
+        setError("Configuration error (API key). Contact admin.");
+      } else if (msg.includes("operation-not-allowed")) {
+        setError("Email/password sign-in is not enabled. Contact admin.");
       } else {
-        setError("Sign-in failed. Check your credentials.");
+        // Show raw Firebase error code for debugging
+        const code = msg.match(/\(auth\/[^)]+\)/)?.[0] ?? "";
+        setError(`Sign-in failed${code ? ": " + code : ""}. Contact admin if this persists.`);
       }
     } finally {
       setLoading(false);
@@ -82,15 +91,40 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
             <label className="block text-xs font-medium text-gray-600 uppercase tracking-wide">
               Password
             </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-              placeholder="••••••••"
-              className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+                placeholder="••••••••"
+                className="w-full px-3.5 py-2.5 pr-10 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                tabIndex={-1}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? (
+                  /* eye-off */
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/>
+                  </svg>
+                ) : (
+                  /* eye */
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
 
           <button

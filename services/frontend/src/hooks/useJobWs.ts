@@ -4,7 +4,7 @@ import { pollJob } from "../api";
 import type { JobPollResponse } from "../types";
 
 const WS_BASE = import.meta.env.VITE_WS_BASE_URL || "";
-const POLL_INTERVAL_MS = 3_000;
+const POLL_INTERVAL_MS = 1_000;   // 1 s — fast enough to catch completion quickly
 const HEARTBEAT_TIMEOUT_MS = 20_000;
 
 export function useJobWs(jobId: string | null) {
@@ -55,17 +55,57 @@ export function useJobWs(jobId: string | null) {
         resetHeartbeat();
         try {
           const msg = JSON.parse(ev.data as string);
-          if (msg.type === "heartbeat") return;
-          if (msg.type === "completed" || msg.type === "failed" || msg.type === "progress") {
-            const partial: Partial<JobPollResponse> = {
+          // Backend uses `event` field (not `type`) — see WsCompletedEvent / WsHeartbeatEvent
+          if (msg.event === "heartbeat") return;
+
+          if (msg.event === "completed") {
+            upsertJob({
               job_id: jobId,
-              status: msg.type === "completed" ? "completed" : msg.type === "failed" ? "failed" : "processing",
-              progress_pct: msg.progress_pct ?? 0,
+              status: "completed",
+              progress_pct: 100,
               result: msg.result ?? null,
-              error_message: msg.error_message ?? null,
+              error_message: null,
               estimated_completion_s: null,
-            };
-            upsertJob(partial as JobPollResponse);
+            } as JobPollResponse);
+          } else if (msg.event === "failed") {
+            upsertJob({
+              job_id: jobId,
+              status: "failed",
+              progress_pct: 0,
+              result: null,
+              error_message: msg.error ?? msg.error_message ?? "Processing failed",
+              estimated_completion_s: null,
+            } as JobPollResponse);
+          } else if (msg.event === "inference_progress" || msg.event === "inference_started") {
+            upsertJob({
+              job_id: jobId,
+              status: "processing",
+              progress_pct: Math.round((msg.progress ?? 0) * 100),
+              result: null,
+              error_message: null,
+              estimated_completion_s: null,
+            } as JobPollResponse);
+          } else if (msg.event === "cancelled") {
+            upsertJob({
+              job_id: jobId,
+              status: "cancelled",
+              progress_pct: 0,
+              result: null,
+              error_message: "Cancelled by user.",
+              estimated_completion_s: null,
+            } as JobPollResponse);
+          } else if (msg.event === "status") {
+            // Initial state sent by the server when WS first connects
+            if (msg.status === "completed" && msg.result) {
+              upsertJob({
+                job_id: jobId,
+                status: "completed",
+                progress_pct: 100,
+                result: msg.result,
+                error_message: null,
+                estimated_completion_s: null,
+              } as JobPollResponse);
+            }
           }
         } catch {
           // ignore malformed WS message

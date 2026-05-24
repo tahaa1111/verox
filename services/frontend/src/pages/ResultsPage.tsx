@@ -1,39 +1,123 @@
 /**
  * ResultsPage — Prescription OCR results.
  *
- * Shows:
- *  - Real-time job progress (polling + WebSocket)
- *  - Structured patient + doctor block
- *  - Medication table with CNAM reimbursement column
- *  - Overall confidence + review flags
- *  - Submit Correction link
+ * Layout (always):
+ *  1. Loading spinner (while processing)
+ *  2. Detected Text — per YOLO crop, with YOLO + model confidence badges
+ *  3. Structured Prescription (patient/doctor/medications) — only if looks like a prescription
+ *  4. Raw text labeling panel — always shown if any text was found
+ *  5. Submit Correction + New Scan
  */
 
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "../store";
 import { useJobWs } from "../hooks/useJobWs";
-import { pollJob } from "../api";
+import { pollJob, cancelJob } from "../api";
 import { ProgressBar } from "../components/ProgressBar";
 import { MedicationTable } from "../components/MedicationTable";
 import { ConfidenceBadge } from "../components/ConfidenceBadge";
-import type { PrescriptionResult } from "../types";
+import type { PrescriptionResult, CropText } from "../types";
 
 // ---------------------------------------------------------------------------
-// Sub-components
+// Helpers
+// ---------------------------------------------------------------------------
+
+function confColor(v: number): string {
+  if (v >= 0.75) return "bg-emerald-100 text-emerald-800 border-emerald-200";
+  if (v >= 0.50) return "bg-amber-100 text-amber-800 border-amber-200";
+  return "bg-red-100 text-red-800 border-red-200";
+}
+
+function confLabel(v: number): string {
+  if (v >= 0.75) return "High";
+  if (v >= 0.50) return "Medium";
+  return "Low";
+}
+
+// ---------------------------------------------------------------------------
+// CropTexts — the star of the show: per-YOLO-crop text + confidence
+// ---------------------------------------------------------------------------
+
+function CropTexts({ crops, overallConf }: { crops: CropText[]; overallConf: number }) {
+  const [expanded, setExpanded] = useState(true);
+  if (!crops || crops.length === 0) return null;
+
+  return (
+    <div className="space-y-3">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="flex items-center justify-between w-full group"
+      >
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold text-gray-900">Detected Text</h2>
+          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium border border-blue-100">
+            {crops.length} crop{crops.length !== 1 ? "s" : ""}
+          </span>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${confColor(overallConf)}`}>
+            {confLabel(overallConf)} confidence
+          </span>
+        </div>
+        <svg
+          className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? "rotate-180" : ""}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {expanded && (
+        <div className="space-y-3">
+          {crops.map((crop, i) => (
+            <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              {/* Crop header */}
+              <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Crop {crop.cell}
+                </span>
+                {/* YOLO confidence */}
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-gray-400">YOLO:</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded font-mono font-medium border ${confColor(crop.yolo_confidence)}`}>
+                    {(crop.yolo_confidence * 100).toFixed(0)}%
+                  </span>
+                </div>
+                {/* Model read confidence */}
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-gray-400">Read:</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded font-mono font-medium border ${confColor(crop.model_confidence)}`}>
+                    {(crop.model_confidence * 100).toFixed(0)}%
+                  </span>
+                </div>
+              </div>
+              {/* Detected text */}
+              <pre className="text-sm text-gray-800 font-mono whitespace-pre-wrap break-words leading-relaxed p-4">
+                {crop.text || <span className="text-gray-300 italic">No text detected in this region</span>}
+              </pre>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PatientCard — shown only when prescription detected
 // ---------------------------------------------------------------------------
 
 function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">{label}</span>
-      <span className="text-sm font-medium text-gray-900">{value ?? <span className="text-gray-300 italic">—</span>}</span>
+      <span className="text-sm font-medium text-gray-900">
+        {value ?? <span className="text-gray-300 italic">—</span>}
+      </span>
     </div>
   );
 }
 
 function PatientCard({ result }: { result: PrescriptionResult }) {
-  // Support both new structured schema and legacy flat fields
   const firstName = result.patient?.name ?? result.patient_name ?? null;
   const lastName = result.patient?.last_name ?? null;
   const fullName = [firstName, lastName].filter(Boolean).join(" ") || null;
@@ -76,14 +160,98 @@ function PatientCard({ result }: { result: PrescriptionResult }) {
         </div>
         <div className="grid grid-cols-1 gap-3">
           <InfoRow label="Name" value={doctorName} />
-          <InfoRow label="Clinic / Stamp" value={doctorStamp} />
+          <InfoRow label="Clinic / Hospital" value={doctorStamp} />
         </div>
-        {/* Confidence */}
-        <div className="pt-2 border-t border-gray-100 flex items-center gap-2">
-          <span className="text-xs text-gray-400 uppercase tracking-wide">Overall Confidence</span>
-          <ConfidenceBadge value={result.overall_confidence} />
-        </div>
+        {result.overall_confidence != null && (
+          <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+            <span className="text-xs text-gray-400 uppercase tracking-wide">Overall Confidence</span>
+            <ConfidenceBadge value={result.overall_confidence} />
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RawTextLabelPanel — labeling only, shown below crop texts
+// ---------------------------------------------------------------------------
+
+const FIELD_PRESETS = [
+  "Patient Information",
+  "Doctor / Prescriber",
+  "Medication",
+  "Dosage & Instructions",
+  "Date / Reference",
+  "CNAM / Insurance",
+  "Additional Notes",
+  "Other",
+];
+
+function RawTextLabelPanel({ rawText }: { rawText: string }) {
+  const chunks = rawText
+    ? rawText.split(/\n{2,}/).map((c) => c.trim()).filter(Boolean)
+    : [];
+  const [labels, setLabels] = useState<Record<number, string>>({});
+  const [expanded, setExpanded] = useState(false);
+
+  if (chunks.length === 0) return null;
+
+  return (
+    <div className="space-y-3">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="flex items-center justify-between w-full group"
+      >
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold text-gray-800">Label Text Blocks</h2>
+          <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">
+            {chunks.length} block{chunks.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+        <svg
+          className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? "rotate-180" : ""}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {expanded && (
+        <>
+          <p className="text-xs text-gray-500">
+            Assign headers to text blocks not captured in the structured fields.
+          </p>
+          <div className="space-y-3">
+            {chunks.map((chunk, i) => (
+              <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <select
+                    value={labels[i] ?? ""}
+                    onChange={(e) => setLabels((prev) => ({ ...prev, [i]: e.target.value }))}
+                    className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-600 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
+                  >
+                    <option value="">— assign header —</option>
+                    {FIELD_PRESETS.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  {labels[i] && (
+                    <span className="text-xs bg-brand-50 text-brand-700 px-2 py-0.5 rounded-full font-medium border border-brand-100">
+                      {labels[i]}
+                    </span>
+                  )}
+                  <span className="ml-auto text-xs text-gray-300">Block {i + 1}</span>
+                </div>
+                <pre className="text-sm text-gray-700 font-mono whitespace-pre-wrap break-words leading-relaxed bg-gray-50 rounded-lg p-3 border border-gray-100">
+                  {chunk}
+                </pre>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 pt-1">
+            ℹ️ Labels are local only — use <span className="font-medium text-gray-500">Submit Correction</span> to send to the system.
+          </p>
+        </>
+      )}
     </div>
   );
 }
@@ -97,6 +265,19 @@ export function ResultsPage() {
   const navigate = useNavigate();
   const job = useStore((s) => (jobId ? s.activeJobs[jobId] : null));
   const upsertJob = useStore((s) => s.upsertJob);
+  const [cancelling, setCancelling] = useState(false);
+
+  const handleCancel = async () => {
+    if (!jobId) return;
+    setCancelling(true);
+    try {
+      await cancelJob(jobId);
+      upsertJob({ job_id: jobId, status: "cancelled", progress_pct: 0, result: null, error_message: "Cancelled by user.", estimated_completion_s: null });
+      navigate("/");
+    } catch {
+      setCancelling(false);
+    }
+  };
 
   useJobWs(jobId ?? null);
 
@@ -108,8 +289,18 @@ export function ResultsPage() {
 
   if (!jobId) return <p className="text-red-600">No job ID.</p>;
 
-  const isLoading = !job || (job.status !== "completed" && job.status !== "failed");
-  const result = job?.result;
+  const isLoading = !job || (job.status !== "completed" && job.status !== "failed" && job.status !== "cancelled");
+  const result: PrescriptionResult | null = job?.result as PrescriptionResult | null;
+
+  // A result "looks like a prescription" if it has ≥1 medication OR has patient/doctor info
+  const isPrescription = result
+    ? (result.medications?.length ?? 0) > 0 ||
+      !!(result.patient?.name ?? result.patient_name) ||
+      !!(result.doctor?.name ?? result.doctor_name)
+    : false;
+
+  const cropTexts = result?.crop_texts ?? [];
+  const overallConf = result?.overall_confidence ?? 0;
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
@@ -130,19 +321,52 @@ export function ResultsPage() {
         </button>
       </div>
 
-      {/* Progress card */}
+      {/* Loading spinner */}
       {isLoading && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
           <div className="flex items-center gap-3">
-            <div className="animate-spin rounded-full h-5 w-5 border-2 border-brand-600 border-t-transparent" />
+            <div className="animate-spin rounded-full h-5 w-5 border-2 border-brand-600 border-t-transparent flex-shrink-0" />
             <span className="text-sm font-medium text-gray-700 capitalize">
               {job?.status ?? "Loading"}…
             </span>
             {job?.progress_pct != null && (
-              <span className="text-xs text-gray-400 ml-auto">{job.progress_pct}%</span>
+              <span className="text-xs text-gray-400">{job.progress_pct}%</span>
             )}
+            <button
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="ml-auto flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-200 hover:border-red-300 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 rounded-lg transition-colors"
+            >
+              {cancelling ? (
+                <div className="w-3 h-3 border border-red-400 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              )}
+              {cancelling ? "Cancelling…" : "Cancel"}
+            </button>
           </div>
           {job && <ProgressBar pct={job.progress_pct} />}
+        </div>
+      )}
+
+      {/* Cancelled */}
+      {job?.status === "cancelled" && (
+        <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm text-gray-600 flex items-center gap-3">
+          <svg className="w-5 h-5 flex-shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+          </svg>
+          <div>
+            <p className="font-semibold text-gray-700">Job cancelled</p>
+            <p className="mt-0.5 text-gray-500">This scan was cancelled. Start a new scan to try again.</p>
+          </div>
+          <button
+            onClick={() => navigate("/")}
+            className="ml-auto bg-brand-600 hover:bg-brand-700 text-white font-medium text-sm px-4 py-2 rounded-xl transition-colors"
+          >
+            New Scan
+          </button>
         </div>
       )}
 
@@ -151,31 +375,99 @@ export function ResultsPage() {
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-700">
           <p className="font-semibold">Processing failed</p>
           <p className="mt-1 text-red-600">{job.error_message ?? "An unknown error occurred."}</p>
+          <button
+            onClick={() => navigate("/")}
+            className="mt-3 bg-brand-600 hover:bg-brand-700 text-white font-medium text-sm px-4 py-2 rounded-xl transition-colors"
+          >
+            New Scan
+          </button>
         </div>
       )}
 
-      {/* Results */}
       {result && (
         <>
-          {/* Low-confidence warning */}
-          {result.low_confidence_fields?.length > 0 && (
-            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+          {/* ① DETECTED TEXT — always shown first */}
+          {cropTexts.length > 0 ? (
+            <CropTexts crops={cropTexts} overallConf={overallConf} />
+          ) : result.extracted_raw_text ? (
+            /* Fallback: model returned raw text but no per-crop breakdown */
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">
+                <h2 className="text-base font-semibold text-gray-900">Detected Text</h2>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${confColor(overallConf)}`}>
+                  {confLabel(overallConf)} confidence · {(overallConf * 100).toFixed(0)}%
+                </span>
+              </div>
+              <pre className="text-sm text-gray-800 font-mono whitespace-pre-wrap break-words leading-relaxed p-4">
+                {result.extracted_raw_text}
+              </pre>
+            </div>
+          ) : null}
+
+          {/* Not-a-prescription notice */}
+          {!isPrescription && overallConf < 0.3 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800 flex items-start gap-2">
               <svg className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856C19.0 19 20 17.657 20 16.19c0-.98-.503-1.84-1.263-2.37L12 3 5.263 13.82C4.503 14.35 4 15.21 4 16.19 4 17.657 4.982 19 6.144 19z"/>
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856C19 19 20 17.657 20 16.19c0-.98-.503-1.84-1.263-2.37L12 3 5.263 13.82C4.503 14.35 4 15.21 4 16.19 4 17.657 4.982 19 6.144 19z"/>
               </svg>
-              <span>Low confidence on: <strong>{result.low_confidence_fields.join(", ")}</strong> — verify before dispensing.</span>
+              <span>
+                <strong>Low confidence ({(overallConf * 100).toFixed(0)}%).</strong> The image may not be a prescription,
+                or the text was not legible enough to extract structured data.
+                The raw text above contains everything that was detected.
+              </span>
             </div>
           )}
 
-          {/* Patient + Doctor cards */}
-          <PatientCard result={result} />
+          {/* ② PRESCRIPTION STRUCTURE — only when detected */}
+          {isPrescription && (
+            <>
+              <div className="flex items-center gap-3">
+                <h2 className="text-base font-semibold text-gray-800">Prescription Structure</h2>
+                <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-100 font-medium">
+                  Prescription detected
+                </span>
+              </div>
 
-          {/* Medications */}
-          <div className="space-y-2">
-            <h2 className="text-base font-semibold text-gray-800">Medications</h2>
-            <MedicationTable medications={result.medications} />
-          </div>
+              {/* Low-confidence warning */}
+              {result.low_confidence_fields?.length > 0 && (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+                  <svg className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856C19 19 20 17.657 20 16.19c0-.98-.503-1.84-1.263-2.37L12 3 5.263 13.82C4.503 14.35 4 15.21 4 16.19 4 17.657 4.982 19 6.144 19z"/>
+                  </svg>
+                  <span>
+                    Low confidence on:{" "}
+                    <strong>{result.low_confidence_fields.join(", ")}</strong> — verify before dispensing.
+                  </span>
+                </div>
+              )}
+
+              {/* Patient + Doctor */}
+              <PatientCard result={result} />
+
+              {/* Medications */}
+              <div className="space-y-2">
+                <h2 className="text-base font-semibold text-gray-800">Medications</h2>
+                <MedicationTable medications={result.medications} />
+              </div>
+            </>
+          )}
+
+          {/* ③ LABEL TEXT BLOCKS — collapsed by default */}
+          {result.extracted_raw_text && (
+            <RawTextLabelPanel rawText={result.extracted_raw_text} />
+          )}
+
+          {/* Additional notes */}
+          {result.additional_notes && (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700">
+              <span className="font-semibold text-gray-600 block text-xs uppercase tracking-wide mb-1">
+                Additional Notes
+              </span>
+              {result.additional_notes}
+            </div>
+          )}
 
           {/* Disclaimer */}
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-900">

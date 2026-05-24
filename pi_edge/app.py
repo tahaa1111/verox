@@ -255,6 +255,10 @@ threading.Thread(target=cloud_push_loop, daemon=True).start()
 threading.Thread(target=cloud_submit_loop, daemon=True).start()
 threading.Thread(target=cloud_command_loop, daemon=True).start()
 
+# Auto-start camera + YOLO immediately — no need to wait for a Redis command.
+# The Pi is always ready; "Start Camera" in the frontend just begins frontend polling.
+_do_start()
+
 
 # ---------------------------------------------------------------------------
 # Routes

@@ -29,6 +29,21 @@ _REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 _REDIS_AUTH = os.getenv("REDIS_AUTH_STRING", "")
 _DB_URL = os.getenv("DATABASE_URL_SYNC", "")
 _WS_PREFIX = "ws:job:"
+_CANCEL_PREFIX = "cancel:"
+
+
+def _is_cancelled(job_id: str) -> bool:
+    """Check Redis cancellation flag set by POST /v1/jobs/{job_id}/cancel."""
+    try:
+        kwargs: dict = {"decode_responses": True}
+        if _REDIS_AUTH:
+            kwargs["password"] = _REDIS_AUTH
+        r = redis.from_url(_REDIS_URL, **kwargs)
+        val = r.get(f"{_CANCEL_PREFIX}{job_id}")
+        r.close()
+        return val == "1"
+    except Exception:
+        return False  # if Redis unreachable, don't cancel
 
 
 @celery_app.task(
@@ -77,6 +92,15 @@ def run_pipeline(self, job_id: str, payload: dict, gcs_prefix: str) -> dict:
         _ws_publish(job_id, {"event": "inference_progress", "job_id": job_id,
                              "stage": "ocr", "progress": 0.3, "ts": _now()})
 
+        # Build crop metadata (YOLO confidence per crop, keyed by track_id)
+        crop_meta = {
+            crop.get("track_id", i): {
+                "yolo_confidence": float(crop.get("confidence", 1.0)),
+                "bbox": crop.get("bbox"),
+            }
+            for i, crop in enumerate(crops)
+        }
+
         # 4. Vertex AI inference
         _update_job(job_id, "inferring")
         t1 = time.perf_counter()
@@ -84,6 +108,13 @@ def run_pipeline(self, job_id: str, payload: dict, gcs_prefix: str) -> dict:
         all_raw_outputs: list[dict] = []
 
         for i, grid in enumerate(grids):
+            # Check cancellation before each vLLM call (catches cancel during cold-start retries)
+            if _is_cancelled(job_id):
+                log.info("pipeline_cancelled_by_user", job_id=job_id)
+                _update_job(job_id, "cancelled", error="Cancelled by user.")
+                _ws_publish(job_id, {"event": "cancelled", "job_id": job_id, "ts": _now()})
+                return {"job_id": job_id, "status": "cancelled"}
+
             result = infer_grid(
                 grid_b64=grid.grid_b64,
                 job_id=job_id,
@@ -106,6 +137,12 @@ def run_pipeline(self, job_id: str, payload: dict, gcs_prefix: str) -> dict:
         merged = _merge_grid_outputs(all_raw_outputs)
         queue_wait_ms = _compute_queue_wait(job_id)
 
+        # Build slot map: cell_number → track_id (for merging YOLO conf with model cell_texts)
+        slot_map = {}
+        for grid in grids:
+            for slot in grid.slots:
+                slot_map[slot.cell_number] = slot.track_id
+
         final_result = run_postprocessing(
             raw_output=merged["raw_output"],
             logprobs=merged["logprobs"],
@@ -113,6 +150,8 @@ def run_pipeline(self, job_id: str, payload: dict, gcs_prefix: str) -> dict:
             session_id=payload.get("session_id", ""),
             model_version=active_model,
             timings_ms={},
+            crop_meta=crop_meta,
+            slot_map=slot_map,
         )
 
         # 6. Encrypt PII

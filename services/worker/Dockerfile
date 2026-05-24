@@ -17,6 +17,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt && \
     python3 -c "import celery, redis, psycopg2, structlog, rapidfuzz, json_repair, httpx, google.cloud.storage, PIL, pydantic, pydantic_settings, tenacity, cryptography, dateutil, json_repair"
 
 COPY services/worker/ /app/services/worker/
+COPY services/vllm/prompts/ /app/services/vllm/prompts/
 COPY services/api/core/pii.py /app/services/api/core/pii.py
 COPY services/api/core/config.py /app/services/api/core/config.py
 COPY services/api/core/__init__.py /app/services/api/core/__init__.py
@@ -41,4 +42,4 @@ EXPOSE 8080
 
 # Start minimal HTTP health server (Cloud Run startup probe) then exec Celery as PID 1.
 # health_server.py binds to $PORT (Cloud Run default 8080) and responds 200 to any GET.
-CMD ["/bin/sh", "-c", "python3 /app/services/worker/health_server.py & exec celery -A services.worker.celery_app worker --loglevel=info --concurrency=2 --queues=inference,default --pool=prefork --max-tasks-per-child=50"]
+CMD ["/bin/sh", "-c", "python3 /app/services/worker/health_server.py & exec celery -A services.worker.celery_app worker --loglevel=info --concurrency=1 --queues=inference,default --pool=solo"]

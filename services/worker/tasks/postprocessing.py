@@ -3,12 +3,13 @@ Postprocessing pipeline (spec §5.3).
 Steps in order:
 1. JSON repair (json-repair library)
 2. Schema validation (Pydantic v2)
-3. Drug name normalization (real Tunisian formulary from DD-013)
-4. Date normalization (French + Arabic → ISO 8601)
-5. Dosage normalization (regex pipeline)
-6. Hallucination filter (unregistered drugs → requires_review)
-7. Confidence calibration (logprob + formulary score + completeness, DD-007)
-8. Audit trail construction
+3. Drug name normalization   (Tunisian AMM formulary — liste_amm.xls)
+4. Doctor name normalization (Tunisian provider registry — TAHA.xlsx)
+5. Date normalization (French + Arabic → ISO 8601)
+6. Dosage normalization (regex pipeline)
+7. Hallucination filter (unregistered drugs → requires_review)
+8. Confidence calibration (logprob + formulary score + completeness, DD-007)
+9. Audit trail construction
 """
 
 import json
@@ -19,6 +20,7 @@ from typing import Any, Optional
 import structlog
 
 from services.worker.utils.drug_normalizer import normalize_drug_name
+from services.worker.utils.doctor_normalizer import normalize_doctor_name
 
 logger = structlog.get_logger(__name__)
 
@@ -95,8 +97,14 @@ def run_postprocessing(
     session_id: str,
     model_version: str,
     timings_ms: dict,
+    crop_meta: dict | None = None,
+    slot_map: dict | None = None,
 ) -> dict:
-    """Full postprocessing pipeline. Returns the §6 output schema dict."""
+    """Full postprocessing pipeline. Returns the §6 output schema dict.
+
+    crop_meta: {track_id: {yolo_confidence, bbox}} — YOLO confidence per crop from Pi.
+    slot_map:  {cell_number: track_id} — maps model cell index back to original crop.
+    """
 
     log = logger.bind(job_id=job_id)
 
@@ -106,29 +114,40 @@ def run_postprocessing(
     # ---- Step 2: Schema validation (lenient — we fill defaults) ----
     result = _normalize_schema(parsed, job_id, session_id)
 
-    # ---- Step 3–5: Medication enrichment ----
+    # ---- Step 3: Medication enrichment against AMM registry ----
+    # OCR extracts all detected text. References enrich and validate — nothing is dropped.
+    # Unmatched drugs stay in the list but are flagged requires_review=True.
     review_reasons: list[str] = []
+
     for med in result.get("medications", []):
-        # Drug name normalization
         raw_drug = med.get("drug_name", "")
         inn, formulary_score, registry_meta = normalize_drug_name(raw_drug)
         med["drug_name_normalized"] = inn
         med["formulary_match_score"] = formulary_score
 
-        if formulary_score < 0.85:
+        # Enrich with AMM metadata when available
+        med["amm_info"] = {
+            "dci":        registry_meta.get("dci"),
+            "form":       registry_meta.get("form"),
+            "lab":        registry_meta.get("lab"),
+            "amm":        registry_meta.get("amm"),
+            "class":      registry_meta.get("class"),
+            "dosage_ref": registry_meta.get("dosage"),
+        } if registry_meta else {}
+
+        if formulary_score >= 0.85:
+            med["requires_review"] = False
+        else:
+            # Not found in registry — flag for pharmacist, keep as-is in output
             med["requires_review"] = True
             if "formulary_miss" not in review_reasons:
                 review_reasons.append("formulary_miss")
-        else:
-            med["requires_review"] = False
 
         # Dosage normalization
         raw_dosage = med.get("dosage", "")
         if raw_dosage:
             med["dosage_normalized"] = _normalize_dosage(raw_dosage)
 
-        # Date in medication context (duration normalization)
-        # No ISO date needed here; just clean nulls
         for field in ("dosage", "frequency", "duration", "instructions", "warnings"):
             med[field] = _clean_null(med.get(field))
 
@@ -137,14 +156,40 @@ def run_postprocessing(
     if raw_date:
         result["issue_date"] = _normalize_date(raw_date)
 
+    # ---- Step 4b: Doctor name enrichment against TAHA registry ----
+    # Raw name always kept. If matched → enrich with specialty/address.
+    # If not matched → flag doctor_unregistered but still show the raw name.
+    raw_doctor = _clean_null(result.get("doctor_name"))
+    result["doctor_name"] = raw_doctor
+    if raw_doctor:
+        canonical_doctor, doctor_score, doctor_meta = normalize_doctor_name(raw_doctor)
+        result["doctor_match_score"] = doctor_score
+        if doctor_score >= 0.80:
+            # Confirmed — replace display name with canonical registry name + enrich
+            result["doctor_name"]            = canonical_doctor
+            result["doctor_name_normalized"] = canonical_doctor
+            result["doctor_info"]            = {
+                "specialite": doctor_meta.get("specialite"),
+                "type":       doctor_meta.get("type"),
+                "adresse":    doctor_meta.get("adresse"),
+            } if doctor_meta else {}
+        else:
+            # Not found — keep raw name, surface to pharmacist
+            result["doctor_name_normalized"] = None
+            result["doctor_info"]            = {}
+            review_reasons.append("doctor_unregistered")
+    else:
+        result["doctor_name_normalized"] = None
+        result["doctor_match_score"]     = 0.0
+        result["doctor_info"]            = {}
+
     # ---- Step 5: Clean PII nulls ----
     result["patient_name"] = _clean_null(result.get("patient_name"))
-    result["doctor_name"] = _clean_null(result.get("doctor_name"))
+    result["doctor_name"]  = _clean_null(result.get("doctor_name"))
 
     # ---- Step 6: Hallucination filter ----
-    # Already flagged per-medication above; check aggregate
     flagged_count = sum(1 for m in result.get("medications", []) if m.get("requires_review"))
-    total_meds = len(result.get("medications", []))
+    total_meds    = len(result.get("medications", []))
     if total_meds > 0 and flagged_count / total_meds > 0.5:
         review_reasons.append("high_hallucination_rate")
 
@@ -169,6 +214,51 @@ def run_postprocessing(
             "dosage": logprob_conf,
             "frequency": logprob_conf,
         })
+
+    # ---- Step 8a: Build crop_texts — per-crop text with YOLO + model confidence ----
+    # Merges model's cell_texts (per-cell verbatim text) with YOLO detection confidence
+    # from the Pi. Falls back gracefully if either is missing.
+    cell_texts_raw = parsed.get("cell_texts", [])
+    crop_texts: list[dict] = []
+    _slot_map: dict = slot_map or {}
+    _crop_meta: dict = crop_meta or {}
+
+    if cell_texts_raw and isinstance(cell_texts_raw, list):
+        for ct in cell_texts_raw:
+            if not isinstance(ct, dict):
+                continue
+            cell_num = int(ct.get("cell", 0))
+            text = str(ct.get("text", "")).strip()
+            model_conf = float(ct.get("model_confidence", logprob_conf))
+            track_id = _slot_map.get(cell_num, cell_num)
+            crop_info: dict = _crop_meta.get(track_id) or {}
+            yolo_conf = float(crop_info.get("yolo_confidence", 1.0))
+            if text:
+                crop_texts.append({
+                    "cell": cell_num,
+                    "track_id": track_id,
+                    "text": text,
+                    "model_confidence": round(model_conf, 3),
+                    "yolo_confidence": round(yolo_conf, 3),
+                })
+    elif not cell_texts_raw and result.get("extracted_raw_text"):
+        # Fallback: model didn't return cell_texts but has raw text — wrap as single crop
+        first_crop: dict = next(iter(_crop_meta.values()), {}) if _crop_meta else {}
+        yolo_conf = float(first_crop.get("yolo_confidence", 1.0))
+        first_track_id = next(iter(_slot_map.values()), 1) if _slot_map else 1
+        crop_texts.append({
+            "cell": 1,
+            "track_id": first_track_id,
+            "text": result["extracted_raw_text"],
+            "model_confidence": round(logprob_conf, 3),
+            "yolo_confidence": round(yolo_conf, 3),
+        })
+
+    result["crop_texts"] = crop_texts
+
+    # Ensure extracted_raw_text is never empty — aggregate from cell_texts if needed
+    if not result.get("extracted_raw_text") and crop_texts:
+        result["extracted_raw_text"] = "\n\n".join(ct["text"] for ct in crop_texts)
 
     # ---- Step 8: Final metadata ----
     requires_review = bool(review_reasons) or calibrated_conf < 0.5
@@ -245,6 +335,10 @@ def _normalize_schema(parsed: dict, job_id: str, session_id: str) -> dict:
         "overall_confidence": float(parsed.get("overall_confidence", 0.0)),
         "requires_human_review": False,
         "review_reasons": [],
+        # Doctor normalization fields (populated in step 4b)
+        "doctor_name_normalized":  None,
+        "doctor_match_score":      0.0,
+        "doctor_info":             {},
     }
 
 

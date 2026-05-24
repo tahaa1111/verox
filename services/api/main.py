@@ -38,11 +38,39 @@ structlog.configure(
 logger = structlog.get_logger("medibox.api")
 
 
+async def _bootstrap_admin_grant() -> None:
+    """Ensure the configured admin UID has an active row in admin_role_grants.
+    Idempotent — safe to run on every startup (ON CONFLICT DO NOTHING).
+    Set ADMIN_BOOTSTRAP_UID env var or 'admin_bootstrap_uid' in settings to enable.
+    """
+    import os
+    uid = os.getenv("ADMIN_BOOTSTRAP_UID", "").strip()
+    if not uid:
+        return
+    try:
+        from sqlalchemy import text
+        from services.api.core.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                text("""
+                    INSERT INTO admin_role_grants (user_id, granted_by, notes)
+                    VALUES (:uid, 'system_bootstrap', 'Auto-provisioned admin on startup')
+                    ON CONFLICT DO NOTHING
+                """),
+                {"uid": uid},
+            )
+            await session.commit()
+        logger.info("admin_bootstrap_ok", uid=uid)
+    except Exception as exc:
+        logger.warning("admin_bootstrap_failed", uid=uid, exc=str(exc))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_telemetry("medibox-api")
     configure_metrics("medibox-api")
     await ws_manager.startup()
+    await _bootstrap_admin_grant()
     logger.info("api_startup", environment=settings.environment, project=settings.gcp_project_id)
     yield
     await ws_manager.shutdown()

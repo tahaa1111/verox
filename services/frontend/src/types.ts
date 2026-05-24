@@ -22,6 +22,14 @@ export interface DoctorInfo {
   stamp: string | null;
 }
 
+export interface CropText {
+  cell: number;
+  track_id: number;
+  text: string;
+  model_confidence: number;   // LLM's confidence for reading this cell (0–1)
+  yolo_confidence: number;    // YOLO's detection confidence for this crop (0–1)
+}
+
 export interface PrescriptionResult {
   job_id: string;
   status: "queued" | "processing" | "completed" | "failed";
@@ -38,11 +46,25 @@ export interface PrescriptionResult {
   disclaimer: string;
   processing_time_ms: number | null;
   error_message: string | null;
+  /**
+   * Verbatim transcription of ALL text the model detected on the prescription.
+   * Parsed into contextual blocks in the UI so the pharmacist can label them.
+   */
+  extracted_raw_text: string;
+  additional_notes: string | null;
+  /**
+   * Per-YOLO-crop text with detection + model confidence scores.
+   * Populated from the model's cell_texts output merged with Pi YOLO confidence.
+   */
+  crop_texts: CropText[];
+  /** True if the structured fields look like a prescription. */
+  requires_human_review?: boolean;
+  review_reasons?: string[];
 }
 
 export interface JobPollResponse {
   job_id: string;
-  status: "queued" | "processing" | "completed" | "failed";
+  status: "queued" | "processing" | "completed" | "failed" | "cancelled";
   progress_pct: number;
   estimated_completion_s: number | null;
   result: PrescriptionResult | null;

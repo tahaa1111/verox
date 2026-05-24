@@ -19,11 +19,13 @@ from services.api.core.config import get_settings
 from services.api.core.database import get_db
 from services.api.core.pii import decrypt_pii
 from services.api.models.job import Job
-from services.api.schemas.response import DISCLAIMER, JobPollResponse
+from services.api.schemas.response import DISCLAIMER
 from services.api.ws.manager import HEARTBEAT_INTERVAL, ws_manager
 
 _WS_TOKEN_TTL = 30        # seconds — opaque token expires after 30s (single-use)
 _WS_TOKEN_PREFIX = "wstoken:"
+_CANCEL_PREFIX = "cancel:"          # Redis key: cancel:{job_id} → "1"
+_CANCEL_TTL = 3600                  # 1 hour — worker checks this key before each retry
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -63,30 +65,84 @@ async def get_result(
     job = await _get_owned_job(job_id, claims, db)
 
     if job.status in ("queued", "preprocessing", "inferring", "postprocessing", "retrying"):
-        progress_map = {"queued": 0.05, "preprocessing": 0.2, "inferring": 0.6,
-                        "postprocessing": 0.85, "retrying": 0.1}
-        return JobPollResponse(
-            job_id=str(job.id),
-            status=job.status,
-            progress=progress_map.get(job.status, 0.0),
-        )
+        progress_map = {"queued": 5, "preprocessing": 20, "inferring": 60,
+                        "postprocessing": 85, "retrying": 10}
+        return {
+            "job_id": str(job.id),
+            "status": job.status,
+            "progress_pct": progress_map.get(job.status, 0),
+            "estimated_completion_s": None,
+            "result": None,
+            "error_message": None,
+        }
 
     if job.status == "failed":
-        return JobPollResponse(
-            job_id=str(job.id),
-            status="failed",
-            progress=0.0,
-            message=job.error_message,
-        )
+        return {
+            "job_id": str(job.id),
+            "status": "failed",
+            "progress_pct": 0,
+            "estimated_completion_s": None,
+            "result": None,
+            "error_message": job.error_message,
+        }
 
-    # Completed — decrypt PII before returning
+    # Completed — decrypt PII and wrap in a consistent JobPollResponse envelope
     result = dict(job.result or {})
     if result.get("patient_name"):
         result["patient_name"] = decrypt_pii(result["patient_name"])
     if result.get("doctor_name"):
         result["doctor_name"] = decrypt_pii(result["doctor_name"])
     result["disclaimer"] = DISCLAIMER
-    return result
+    return {
+        "job_id": str(job.id),
+        "status": "completed",
+        "progress_pct": 100,
+        "estimated_completion_s": None,
+        "result": result,
+        "error_message": None,
+    }
+
+
+@router.post("/jobs/{job_id}/cancel", status_code=200)
+async def cancel_job(
+    job_id: str,
+    claims: dict = Depends(verify_firebase_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Cancel a queued or in-progress job.
+    Sets a Redis cancellation flag that the worker checks before each vLLM retry.
+    Also marks the job status as 'cancelled' in Postgres immediately.
+    """
+    job = await _get_owned_job(job_id, claims, db)
+
+    # Only cancel jobs that are not already terminal
+    if job.status in ("completed", "failed", "cancelled"):
+        return {"job_id": job_id, "status": job.status, "message": "Job already in terminal state."}
+
+    # 1. Set Redis cancellation signal — worker checks this before each vLLM retry
+    settings = get_settings()
+    r = aioredis.from_url(settings.redis_url, decode_responses=True)
+    try:
+        await r.set(f"{_CANCEL_PREFIX}{job_id}", "1", ex=_CANCEL_TTL)
+    finally:
+        await r.aclose()
+
+    # 2. Mark job as cancelled in Postgres
+    job.status = "cancelled"
+    job.error_message = "Cancelled by user."
+    await db.commit()
+
+    # 3. Notify any open WebSocket listeners
+    await ws_manager.send_to_job(job_id, {
+        "event": "cancelled",
+        "job_id": job_id,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    })
+
+    logger.info("job_cancelled", job_id=job_id,
+                uid=claims.get("uid", claims.get("user_id", "")))
+    return {"job_id": job_id, "status": "cancelled"}
 
 
 @router.websocket("/ws/jobs/{job_id}")

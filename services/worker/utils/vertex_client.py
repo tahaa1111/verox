@@ -30,7 +30,7 @@ def _load_system_prompt() -> str:
     return "Extract prescription data from the image and return JSON."
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+@retry(stop=stop_after_attempt(20), wait=wait_exponential(multiplier=1, min=4, max=30))
 def infer_grid(
     grid_b64: str,
     job_id: str,

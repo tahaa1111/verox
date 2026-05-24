@@ -68,3 +68,8 @@ export async function signalCameraStart(deviceId = "pi-0001"): Promise<void> {
 export async function signalCameraStop(deviceId = "pi-0001"): Promise<void> {
   await http.post(`/camera/stop?device_id=${deviceId}`);
 }
+
+/** Cancel a queued or in-progress job. */
+export async function cancelJob(jobId: string): Promise<void> {
+  await http.post(`/jobs/${jobId}/cancel`);
+}

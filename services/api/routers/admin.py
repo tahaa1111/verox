@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.core.auth import require_admin
@@ -24,14 +25,57 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 settings = get_settings()
 
 
+# ---------------------------------------------------------------------------
+# GET /admin/models — model registry list for Admin dashboard
+# ---------------------------------------------------------------------------
+
+@router.get("/models")
+async def list_models(
+    claims: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Return all model versions from the registry, newest first."""
+    from sqlalchemy import select
+    from services.api.models.model_registry import ModelRegistry
+
+    result = await db.execute(
+        select(ModelRegistry).order_by(ModelRegistry.created_at.desc())
+    )
+    models = result.scalars().all()
+
+    return [
+        {
+            "id": str(m.id),
+            "display_name": m.version,
+            "vertex_model_resource_name": m.vertex_model_resource_name or "",
+            "vertex_deployed_model_id": m.vertex_deployed_model_id,
+            "eval_drug_f1": float(m.eval_drug_f1) if m.eval_drug_f1 is not None else None,
+            "eval_json_validity": float(m.eval_json_validity) if m.eval_json_validity is not None else None,
+            "deployed_at": m.deployed_at.isoformat() if m.deployed_at else None,
+            "is_current": m.is_active,
+        }
+        for m in models
+    ]
+
+
+# ---------------------------------------------------------------------------
+# POST /admin/maintenance
+# ---------------------------------------------------------------------------
+
+class MaintenanceRequest(BaseModel):
+    active: bool = False
+    reason: str = "System maintenance in progress"
+
+
 @router.post("/maintenance", response_model=MaintenanceModeResponse)
 async def set_maintenance(
     request: Request,
-    enable: bool,
-    message: str = "System maintenance in progress",
+    body: MaintenanceRequest,
     claims: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> MaintenanceModeResponse:
+    enable = body.active
+    message = body.reason or "System maintenance in progress"
     import redis.asyncio as aioredis
     r = aioredis.from_url(settings.redis_url, decode_responses=True)
     user_uid = claims.get("uid", "")
