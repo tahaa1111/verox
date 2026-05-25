@@ -288,6 +288,14 @@ def run_postprocessing(
             "dosage": logprob_conf,
             "frequency": logprob_conf,
         })
+        # Top-level per-drug confidence used by the UI (weighted blend of field scores)
+        fc = med["field_confidences"]
+        med.setdefault("confidence", round(
+            0.50 * fc.get("drug_name", 0.0) +
+            0.30 * fc.get("dosage", logprob_conf) +
+            0.20 * fc.get("frequency", logprob_conf),
+            4,
+        ))
 
     # ---- Step 8a: Build crop_texts — per-crop text with YOLO + model confidence ----
     # Merges model's cell_texts (per-cell verbatim text) with YOLO detection confidence
