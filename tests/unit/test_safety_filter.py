@@ -74,3 +74,21 @@ class TestValidateCropImage:
     def test_max_allowed_size_passes(self):
         # 4096×4096 is exactly the maximum allowed
         validate_crop_image(_make_jpeg_b64(4096, 4096))
+
+    def test_all_black_image_rejected(self):
+        """A solid black image (e.g. lens cap, no light) must be rejected."""
+        img = Image.new("RGB", (512, 512), (0, 0, 0))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        with pytest.raises(ValueError, match="(?i)dark|black"):
+            validate_crop_image(b64)
+
+    def test_all_white_image_rejected(self):
+        """A solid white / blank image must be rejected."""
+        img = Image.new("RGB", (512, 512), (255, 255, 255))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        with pytest.raises(ValueError, match="(?i)blank|empty"):
+            validate_crop_image(b64)
