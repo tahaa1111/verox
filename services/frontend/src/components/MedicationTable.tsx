@@ -27,7 +27,17 @@ export function MedicationTable({ medications }: Props) {
         <tbody className="divide-y divide-gray-100">
           {medications.map((med, i) => (
             <tr key={i} className="hover:bg-gray-50 transition-colors">
-              <td className="px-4 py-3 font-semibold text-gray-900">{med.drug_name}</td>
+              <td className="px-4 py-3">
+                {/* Show corrected name when spell correction was applied */}
+                {med.drug_name_spell_corrected && med.drug_name_spell_corrected !== med.drug_name ? (
+                  <span className="flex flex-col gap-0.5">
+                    <span className="font-semibold text-gray-900">{med.drug_name_spell_corrected}</span>
+                    <span className="text-xs text-gray-400 line-through">{med.drug_name}</span>
+                  </span>
+                ) : (
+                  <span className="font-semibold text-gray-900">{med.drug_name}</span>
+                )}
+              </td>
               <td className="px-4 py-3 text-gray-500">{med.drug_name_normalized ?? "—"}</td>
               <td className="px-4 py-3">{med.dosage ?? "—"}</td>
               <td className="px-4 py-3">{med.frequency ?? "—"}</td>

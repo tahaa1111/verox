@@ -1,12 +1,16 @@
 export interface Medication {
   drug_name: string;
+  /** Spell-corrected trade name (set when OCR typo was fixed, e.g. "Azen" → "Axen") */
+  drug_name_spell_corrected: string | null;
+  /** Edit distance used for the spell correction (0 = no correction applied) */
+  spell_correction_distance: number;
   drug_name_normalized: string | null;
   dosage: string | null;
   frequency: string | null;
   duration: string | null;
   quantity: string | null;
   drug_class: string | null;
-  confidence: number;
+  confidence?: number | null;
   cnam: boolean;
 }
 
