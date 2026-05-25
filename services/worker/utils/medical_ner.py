@@ -39,7 +39,11 @@ if not os.environ.get("REFERANCES_DIR") and not os.path.isdir(_DEFAULT_REFERANCE
         _DEFAULT_REFERANCES = _local
 REFERANCES_DIR = os.getenv("REFERANCES_DIR", _DEFAULT_REFERANCES)
 
-# Limit number of patterns to keep build time under ~1 s
+# Pre-serialised model path — baked into the Docker image at build time.
+# Loading from disk takes < 5 s; building from patterns takes ~20 min.
+_NER_MODEL_PATH = os.path.join(REFERANCES_DIR, "ner_model")
+
+# Limit number of patterns when falling back to runtime build (local dev only)
 MAX_DRUG_PATTERNS = 3000
 MAX_INN_PATTERNS  = 1000
 
@@ -54,18 +58,40 @@ except ImportError:
 
 @lru_cache(maxsize=1)
 def _build_nlp():
-    """Build spaCy NLP pipeline with EntityRuler once. Cached after first call."""
+    """Load the pre-serialised spaCy NER pipeline (< 5 s).
+
+    The model is baked into the Docker image by the Dockerfile RUN step that
+    calls build_ner_model.py at image-build time.  Loading from disk avoids
+    the ~20-minute cold-build cost that occurred when patterns were compiled
+    at container startup.
+
+    Falls back to runtime build if the serialised model is missing
+    (local development without the Docker image).
+    """
     if not _SPACY_AVAILABLE:
         return None
 
+    # ── Fast path: load pre-serialised model from Docker image ──────────────
+    if os.path.isdir(_NER_MODEL_PATH):
+        try:
+            nlp = spacy.load(_NER_MODEL_PATH)
+            logger.info("ner_model_loaded", path=_NER_MODEL_PATH,
+                        pipes=nlp.pipe_names)
+            return nlp
+        except Exception as exc:
+            logger.warning("ner_model_load_failed", path=_NER_MODEL_PATH,
+                           exc=str(exc), fallback="building_from_patterns")
+
+    # ── Slow fallback: build from patterns (local dev / missing model) ───────
+    logger.warning("ner_model_not_found",
+                   path=_NER_MODEL_PATH,
+                   msg="Building NER pipeline from patterns — this takes ~20 min on cold start. "
+                       "Run build_ner_model.py and include the output in your Docker image.")
     try:
         nlp = spacy.blank("fr")
-
-        # phrase_matcher_attr="LOWER" → case-insensitive matching
         ruler = nlp.add_pipe("entity_ruler", config={"phrase_matcher_attr": "LOWER"})
         patterns: list[dict] = []
 
-        # DRUG — trade names
         reg_path = os.path.join(REFERANCES_DIR, "drug_registry.json")
         if os.path.exists(reg_path):
             with open(reg_path, encoding="utf-8") as f:
@@ -79,7 +105,6 @@ def _build_nlp():
         else:
             logger.warning("ner_drug_registry_not_found", path=reg_path)
 
-        # DRUG_INN — DCIs/INN
         dict_path = os.path.join(REFERANCES_DIR, "drug_dict.json")
         if os.path.exists(dict_path):
             with open(dict_path, encoding="utf-8") as f:

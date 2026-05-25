@@ -25,6 +25,29 @@ COPY services/api/__init__.py /app/services/api/__init__.py
 COPY services/__init__.py /app/services/__init__.py
 COPY referances/ /app/referances/
 
+# ---------------------------------------------------------------------------
+# Build + serialise the spaCy NER pipeline into the image.
+# Running ruler.add_patterns() at image-build time (once, on CI hardware)
+# means containers load the model from disk in < 5 s instead of rebuilding
+# it at runtime in ~20 min on every cold start.
+# Output: /app/referances/ner_model/  (spaCy on-disk format)
+# ---------------------------------------------------------------------------
+RUN python3 -c "\
+import sys, json, os, time; sys.path.insert(0, '/app'); \
+import spacy; \
+t0 = time.time(); \
+REFS = '/app/referances'; \
+nlp = spacy.blank('fr'); \
+ruler = nlp.add_pipe('entity_ruler', config={'phrase_matcher_attr': 'LOWER'}); \
+patterns = []; \
+reg = json.load(open(f'{REFS}/drug_registry.json')); \
+[patterns.append({'label':'DRUG','pattern':n.strip()}) for i,n in enumerate(reg) if i<3000 and n and len(n.strip())>=3]; \
+dct = json.load(open(f'{REFS}/drug_dict.json')); \
+[patterns.append({'label':'DRUG_INN','pattern':d.strip()}) for i,d in enumerate(dct) if i<1000 and d and len(d.strip())>=3]; \
+ruler.add_patterns(patterns); \
+nlp.to_disk(f'{REFS}/ner_model'); \
+print(f'NER model serialised: {len(patterns)} patterns in {time.time()-t0:.1f}s -> {REFS}/ner_model')"
+
 # Pre-compile all application code to .pyc files for faster Celery startup.
 # This runs AFTER all COPY steps so the app code .pyc files are baked in.
 RUN python3 -c "\
