@@ -201,6 +201,9 @@ def run_postprocessing(
                 "type":       doctor_meta.get("type"),
                 "adresse":    doctor_meta.get("adresse"),
             } if doctor_meta else {}
+            # Sync canonical name into nested doctor object (used by frontend PatientCard)
+            if result.get("doctor") and isinstance(result["doctor"], dict):
+                result["doctor"]["name"] = canonical_doctor
         else:
             # Not found — keep raw name, surface to pharmacist
             result["doctor_name_normalized"] = None
