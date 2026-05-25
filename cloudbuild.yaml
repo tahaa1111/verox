@@ -233,6 +233,10 @@ steps:
       - --memory=2Gi
       - --timeout=3600s
       - --no-allow-unauthenticated
+      # Celery workers run continuously (not request-driven), so CPU must be
+      # allocated at all times — otherwise Cloud Run throttles the process to
+      # near-zero CPU when idle and Python imports take 10+ minutes.
+      - --no-cpu-throttling
       - --update-secrets=DATABASE_URL_SYNC=medibox-database-url-sync:latest,REDIS_URL=medibox-redis-url:latest,REDIS_AUTH_STRING=medibox-redis-auth:latest,PII_ENCRYPTION_KEY=medibox-pii-encryption-key:latest,CELERY_BROKER_URL=medibox-celery-broker-url:latest,CELERY_RESULT_BACKEND=medibox-celery-result-backend:latest
       # REDIS_URL (full URL with auth) comes from medibox-redis-url secret.
       # REDIS_AUTH_STRING (bare password) comes from medibox-redis-auth secret.
