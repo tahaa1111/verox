@@ -71,20 +71,34 @@ def validate_crop_image(image_base64: str, track_id: int = 0) -> bytes:
         raise SafetyFilterError(f"track_id={track_id}: image validation error: {exc}")
 
     # Blank / empty image detection — reject before sending to vLLM.
-    # Convert to grayscale and check what fraction of pixels carry real content
-    # (luminance < DARK_PIXEL_THRESHOLD).  A blank white sheet, an all-black
-    # frame, or an accidental camera capture of a solid surface will fail here.
+    # Convert to grayscale and check what fraction of pixels carry real content.
+    # A real prescription has text on white paper → mixed dark + bright pixels.
+    # Two failure modes:
+    #   • All-white / blank sheet  → almost NO dark pixels (dark_fraction < 0.2%)
+    #   • All-black / lens cap     → almost NO bright pixels (bright_fraction < 0.2%)
     try:
         with Image.open(io.BytesIO(raw)) as img:
             gray = img.convert("L")
             pixels = list(gray.getdata())
+            n = len(pixels)
+            if n == 0:
+                raise SafetyFilterError(f"track_id={track_id}: image has no pixels")
             dark_count = sum(1 for p in pixels if p < DARK_PIXEL_THRESHOLD)
-            dark_fraction = dark_count / len(pixels) if pixels else 0
+            dark_fraction = dark_count / n
+            bright_fraction = 1.0 - dark_fraction
+            # All-white / blank check
             if dark_fraction < DARK_PIXEL_MIN_FRACTION:
                 raise SafetyFilterError(
                     f"track_id={track_id}: image appears blank or empty "
                     f"(only {dark_fraction*100:.3f}% dark pixels — "
                     "please upload a clear photo of the prescription)"
+                )
+            # All-black / dark frame check
+            if bright_fraction < DARK_PIXEL_MIN_FRACTION:
+                raise SafetyFilterError(
+                    f"track_id={track_id}: image appears all-dark or black "
+                    f"(only {bright_fraction*100:.3f}% bright pixels — "
+                    "please ensure the image is properly lit and in focus)"
                 )
     except SafetyFilterError:
         raise
