@@ -33,24 +33,22 @@ async def submit(
     claims: dict = Depends(verify_firebase_token),
     db: AsyncSession = Depends(get_db),
 ) -> SubmitResponse:
-    # Check maintenance mode
+    # Check maintenance mode + rate limit using a single Redis connection
     import redis.asyncio as aioredis
     r = aioredis.from_url(settings.redis_url, decode_responses=True)
     try:
         maintenance = await r.get(settings.maintenance_redis_key)
+        if maintenance:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={"status": "maintenance", "message": maintenance},
+            )
+        # Verify device_id claim matches payload
+        verify_device_claim(claims, payload.device_id)
+        # Per-device rate limiting (Redis token bucket)
+        await _check_rate_limit(r, payload.device_id)
     finally:
         await r.aclose()
-    if maintenance:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"status": "maintenance", "message": maintenance},
-        )
-
-    # Verify device_id claim matches payload
-    verify_device_claim(claims, payload.device_id)
-
-    # Per-device rate limiting (Redis token bucket)
-    await _check_rate_limit(r, payload.device_id)
 
     job_id = uuid.uuid4()
     user_uid: str = claims.get("uid", claims.get("user_id", ""))
