@@ -84,6 +84,21 @@ class TestValidateCropImage:
         with pytest.raises(ValueError, match="(?i)dark|black"):
             validate_crop_image(b64)
 
+    def test_noisy_dark_camera_image_rejected(self):
+        """A real camera dark image with sensor noise (mean luminance ~30) must be rejected."""
+        import random
+        rng = random.Random(42)
+        # Simulate sensor noise: pixels uniformly spread 0–60 (mean ~30)
+        pixels = [rng.randint(0, 60) for _ in range(512 * 512)]
+        img = Image.new("L", (512, 512))
+        img.putdata(pixels)
+        img = img.convert("RGB")
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        with pytest.raises(ValueError, match="(?i)dark|black|luminance"):
+            validate_crop_image(b64)
+
     def test_all_white_image_rejected(self):
         """A solid white / blank image must be rejected."""
         img = Image.new("RGB", (512, 512), (255, 255, 255))

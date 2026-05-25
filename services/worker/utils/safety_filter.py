@@ -17,18 +17,28 @@ MAX_BYTES_DECODED = 2 * 1024 * 1024
 
 # Blank-image detection thresholds.
 #
-# Two complementary checks:
-#  1. All-WHITE / blank sheet: fewer than 0.2% of pixels have luminance < 200.
-#     (Catches blank paper, accidental flash captures, etc.)
+# Three complementary checks on grayscale luminance (0–255):
 #
-#  2. All-BLACK / lens cap: more than 98% of pixels have luminance < 30.
-#     Uses a much lower luminance threshold so mid-gray images (underexposed
-#     prescriptions) are not incorrectly rejected — only truly black frames.
+#  1. All-WHITE / blank sheet:
+#     Fewer than 0.2% of pixels have luminance < 200.
+#     (Catches blank paper, accidental flash captures.)
+#
+#  2. All-BLACK by fraction — solid black (e.g. synthetic test images):
+#     More than 98% of pixels have luminance < 30.
+#     (Catches programmatically-created black images.)
+#
+#  3. All-BLACK by mean — real camera dark images (noisy, not pixel-perfect black):
+#     Mean luminance across all pixels < 50.
+#     Real cameras produce sensor noise (pixels at 20–60 even in total darkness),
+#     so a pure fraction check misses them. Mean luminance is robust to noise:
+#     a dark room image has mean ~20–40; a dim but real prescription has mean ~80+.
 DARK_PIXEL_THRESHOLD = 200       # content threshold for all-white check
 DARK_PIXEL_MIN_FRACTION = 0.002  # min fraction of pixels that must be "dark" (< 200)
 
 VERY_DARK_THRESHOLD = 30         # luminance below which a pixel counts as "very dark"
-VERY_DARK_MAX_FRACTION = 0.98    # if > 98% of pixels are very dark → reject as all-black
+VERY_DARK_MAX_FRACTION = 0.98    # if > 98% of pixels are very dark → reject (check 2)
+
+DARK_MEAN_MAX = 50               # if mean luminance < 50 → reject as too dark (check 3)
 
 
 class SafetyFilterError(ValueError):
@@ -93,14 +103,15 @@ def validate_crop_image(image_base64: str, track_id: int = 0) -> bytes:
                 raise SafetyFilterError(f"track_id={track_id}: image has no pixels")
             dark_count = sum(1 for p in pixels if p < DARK_PIXEL_THRESHOLD)
             dark_fraction = dark_count / n
-            # All-white / blank check: almost no dark pixels
+            # Check 1 — All-white / blank: almost no dark pixels
             if dark_fraction < DARK_PIXEL_MIN_FRACTION:
                 raise SafetyFilterError(
                     f"track_id={track_id}: image appears blank or empty "
                     f"(only {dark_fraction*100:.3f}% dark pixels — "
                     "please upload a clear photo of the prescription)"
                 )
-            # All-black / dark frame check: almost all pixels are very dark (< 30)
+            # Check 2 — All-black by fraction: almost all pixels near-black (< 30)
+            # Catches solid black synthetic images (e.g. Image.new("RGB", ..., (0,0,0)))
             very_dark_count = sum(1 for p in pixels if p < VERY_DARK_THRESHOLD)
             very_dark_fraction = very_dark_count / n
             if very_dark_fraction > VERY_DARK_MAX_FRACTION:
@@ -108,6 +119,16 @@ def validate_crop_image(image_base64: str, track_id: int = 0) -> bytes:
                     f"track_id={track_id}: image appears all-dark or black "
                     f"({very_dark_fraction*100:.1f}% of pixels are near-black — "
                     "please ensure the image is properly lit and in focus)"
+                )
+            # Check 3 — All-black by mean: real camera dark images with sensor noise.
+            # A noisy dark-room image has mean luminance ~20–40 even though individual
+            # pixels vary, so the fraction check above misses them. Mean is robust.
+            mean_luminance = sum(pixels) / n
+            if mean_luminance < DARK_MEAN_MAX:
+                raise SafetyFilterError(
+                    f"track_id={track_id}: image is too dark to read "
+                    f"(mean luminance {mean_luminance:.1f}/255 — "
+                    "please ensure the prescription is well-lit)"
                 )
     except SafetyFilterError:
         raise
