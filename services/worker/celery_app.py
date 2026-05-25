@@ -82,7 +82,19 @@ from celery.signals import worker_ready  # noqa: E402
 
 @worker_ready.connect
 def _pre_warm_caches(sender, **kwargs):  # noqa: ANN001
-    """Build all @lru_cache heavy indexes before the first task arrives."""
+    """Kick off cache warm-up in a background daemon thread.
+
+    Runs immediately after Celery is ready so the main worker loop
+    is NOT blocked — the first job may still trigger a cold build if
+    it arrives before warm-up finishes, but subsequent jobs are instant.
+    """
+    import threading
+    t = threading.Thread(target=_do_pre_warm, name="prewarm", daemon=True)
+    t.start()
+
+
+def _do_pre_warm() -> None:
+    """Build all @lru_cache heavy indexes once, in the background."""
     import logging
     log = logging.getLogger("medibox.worker.prewarm")
 
