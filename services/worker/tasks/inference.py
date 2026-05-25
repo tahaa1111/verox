@@ -289,9 +289,17 @@ def _compute_queue_wait(job_id: str) -> int:
 
 
 def _stream_to_bigquery(job_id: str, payload: dict, result: dict, model_version: str) -> None:
-    """Stream job result to BigQuery medibox.requests table (DD-015)."""
+    """Stream job result to BigQuery medibox.requests table (DD-015).
+
+    Silently skips when google-cloud-bigquery is not installed (it is kept
+    out of requirements.txt because grpcio interferes with Celery startup).
+    """
     try:
-        from google.cloud import bigquery
+        from google.cloud import bigquery  # type: ignore[import]
+    except ImportError:
+        return  # BigQuery package not installed — skip without logging
+
+    try:
         project = os.getenv("GCP_PROJECT_ID", "")
         if not project:
             return
@@ -308,7 +316,7 @@ def _stream_to_bigquery(job_id: str, payload: dict, result: dict, model_version:
         }]
         client.insert_rows_json(f"{project}.medibox.requests", rows)
     except Exception as exc:
-        logger.error("bq_stream_failed", job_id=job_id, exc=str(exc))
+        logger.warning("bq_stream_failed", job_id=job_id, exc=str(exc))
 
 
 def _now() -> str:

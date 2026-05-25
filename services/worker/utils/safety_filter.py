@@ -15,6 +15,13 @@ MAX_PIXELS = 25_000_000    # 25 MP
 MAX_DIMENSION = 4096       # pixels per side
 MAX_BYTES_DECODED = 2 * 1024 * 1024
 
+# Blank-image detection thresholds.
+# A pixel is "dark" if its luminance < DARK_PIXEL_THRESHOLD (0-255).
+# If fewer than DARK_PIXEL_MIN_FRACTION of pixels are dark, the image
+# is considered blank (empty sheet, all-white, accidental blank photo).
+DARK_PIXEL_THRESHOLD = 200     # pixels darker than this are "content"
+DARK_PIXEL_MIN_FRACTION = 0.002  # at least 0.2% of pixels must be dark
+
 
 class SafetyFilterError(ValueError):
     pass
@@ -62,6 +69,27 @@ def validate_crop_image(image_base64: str, track_id: int = 0) -> bytes:
         raise SafetyFilterError(f"track_id={track_id}: cannot identify image format")
     except Exception as exc:
         raise SafetyFilterError(f"track_id={track_id}: image validation error: {exc}")
+
+    # Blank / empty image detection — reject before sending to vLLM.
+    # Convert to grayscale and check what fraction of pixels carry real content
+    # (luminance < DARK_PIXEL_THRESHOLD).  A blank white sheet, an all-black
+    # frame, or an accidental camera capture of a solid surface will fail here.
+    try:
+        with Image.open(io.BytesIO(raw)) as img:
+            gray = img.convert("L")
+            pixels = list(gray.getdata())
+            dark_count = sum(1 for p in pixels if p < DARK_PIXEL_THRESHOLD)
+            dark_fraction = dark_count / len(pixels) if pixels else 0
+            if dark_fraction < DARK_PIXEL_MIN_FRACTION:
+                raise SafetyFilterError(
+                    f"track_id={track_id}: image appears blank or empty "
+                    f"(only {dark_fraction*100:.3f}% dark pixels — "
+                    "please upload a clear photo of the prescription)"
+                )
+    except SafetyFilterError:
+        raise
+    except Exception:
+        pass  # if blank-check itself fails, let the image through
 
     return raw
 
