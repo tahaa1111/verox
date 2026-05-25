@@ -198,11 +198,12 @@ async def camera_capture(
     job_id = uuid.uuid4()
     gcs_prefix = f"{device_id}/{job_id}"
 
+    user_uid: str = claims.get("uid", claims.get("user_id", ""))
     job = Job(
         id=job_id,
         device_id=device_id,
         session_id=uuid.uuid4(),
-        user_uid="camera-capture",
+        user_uid=user_uid,          # use authenticated user's UID for ownership check
         status="queued",
         crop_count=1,
         gcs_prefix=gcs_prefix,
@@ -211,7 +212,7 @@ async def camera_capture(
     db.add(AuditLog(
         correlation_id=uuid.uuid4(),
         action="camera_capture_queued",
-        actor_uid="camera-ui",
+        actor_uid=user_uid,
         resource_type="job",
         resource_id=str(job_id),
         ip_address=request.client.host if request.client else None,

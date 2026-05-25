@@ -21,7 +21,8 @@ export async function submitCorrection(
   jobId: string,
   correctedJson: object
 ): Promise<void> {
-  await http.post(`/corrections/${jobId}`, { corrected_json: correctedJson });
+  // Backend CorrectionRequest expects corrected_data (matches DB column name)
+  await http.post(`/corrections/${jobId}`, { corrected_data: correctedJson });
 }
 
 export async function getAdminModels(): Promise<unknown> {

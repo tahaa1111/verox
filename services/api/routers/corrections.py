@@ -66,11 +66,21 @@ async def submit_correction(
 
 
 def _stream_to_bigquery(job_id: str, user_uid: str, corrected_data: dict) -> None:
-    """Fire-and-forget BigQuery streaming insert (DD-015)."""
+    """Fire-and-forget BigQuery streaming insert (DD-015).
+
+    Silently skips when google-cloud-bigquery is not installed (it is kept
+    out of requirements.txt because grpcio interferes with Celery startup).
+    """
     try:
-        from google.cloud import bigquery
+        from google.cloud import bigquery  # type: ignore[import]
+    except ImportError:
+        return  # BigQuery package not installed — skip without logging
+
+    try:
         from services.api.core.config import get_settings
         cfg = get_settings()
+        if not cfg.gcp_project_id:
+            return
         client = bigquery.Client(project=cfg.gcp_project_id)
         table_id = f"{cfg.gcp_project_id}.medibox.feedback"
         rows = [{
@@ -81,6 +91,6 @@ def _stream_to_bigquery(job_id: str, user_uid: str, corrected_data: dict) -> Non
         }]
         errors = client.insert_rows_json(table_id, rows)
         if errors:
-            logger.error("bq_stream_error", errors=errors)
+            logger.warning("bq_stream_error", errors=errors)
     except Exception as exc:
-        logger.error("bq_stream_failed", exc=str(exc))
+        logger.warning("bq_stream_failed", exc=str(exc))
