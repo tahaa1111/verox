@@ -73,3 +73,13 @@ export async function signalCameraStop(deviceId = "pi-0001"): Promise<void> {
 export async function cancelJob(jobId: string): Promise<void> {
   await http.post(`/jobs/${jobId}/cancel`);
 }
+
+/**
+ * Exchange the Firebase JWT (Authorization header) for a short-lived opaque
+ * WebSocket token (TTL: 30s). The opaque token is passed as ?token= in the
+ * WebSocket URL so the Firebase JWT never appears in server logs or browser history.
+ */
+export async function getWsToken(): Promise<string> {
+  const { data } = await http.post<{ ws_token: string; expires_in: number }>("/ws/token");
+  return data.ws_token;
+}
