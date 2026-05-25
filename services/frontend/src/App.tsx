@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 import { useStore } from "./store";
@@ -24,6 +24,12 @@ import { QueuePage } from "./pages/QueuePage";
  * Admin route is gated on Firebase custom claim { admin: true }.
  * Regular operators only see Camera and Results pages.
  */
+/** Redirect /jobs/:jobId → /results/:jobId (preserves the actual job ID param). */
+function LegacyJobRedirect() {
+  const { jobId } = useParams<{ jobId: string }>();
+  return <Navigate to={`/results/${jobId}`} replace />;
+}
+
 export default function App() {
   const { firebaseToken, setFirebaseToken, setIsAdmin, isAdmin } = useStore();
   const [authReady, setAuthReady] = useState(false);
@@ -81,8 +87,8 @@ export default function App() {
             <Route path="/" element={<CameraPage />} />
             <Route path="/camera" element={<Navigate to="/" replace />} />
             <Route path="/results/:jobId" element={<ResultsPage />} />
-            {/* Legacy job tracker URL — redirect to new results path */}
-            <Route path="/jobs/:jobId" element={<Navigate to="/results/:jobId" replace />} />
+            {/* Legacy job tracker URL — redirect to new results path (preserves :jobId param) */}
+            <Route path="/jobs/:jobId" element={<LegacyJobRedirect />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/queue"   element={<QueuePage />} />
             <Route path="/corrections/:jobId" element={<CorrectionsPage />} />

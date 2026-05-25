@@ -3,7 +3,15 @@ import { useStore } from "../store";
 import { pollJob, getWsToken } from "../api";
 import type { JobPollResponse } from "../types";
 
-const WS_BASE = import.meta.env.VITE_WS_BASE_URL || "";
+// Derive WebSocket host from VITE_API_BASE_URL so we don't need a separate env var.
+// VITE_API_BASE_URL = "https://medibox-api-XXX.us-central1.run.app/v1"
+// → WS_HOST         = "wss://medibox-api-XXX.us-central1.run.app"
+// In dev (VITE_API_BASE_URL = "/v1" or unset) → WS_HOST = "" → relative WS URL
+const _API_BASE = import.meta.env.VITE_API_BASE_URL as string | undefined ?? "";
+const WS_HOST = _API_BASE.startsWith("http")
+  ? _API_BASE.replace(/^http/, "ws").replace(/\/v1\/?$/, "")
+  : (import.meta.env.VITE_WS_BASE_URL as string | undefined ?? "");
+
 const POLL_INTERVAL_MS = 2_000;   // 2 s fallback polling (WS preferred)
 const HEARTBEAT_TIMEOUT_MS = 20_000;
 
@@ -115,7 +123,7 @@ export function useJobWs(jobId: string | null) {
       .then((opaqueToken) => {
         if (cancelled) return;
 
-        const rawUrl = `${WS_BASE}/v1/ws/jobs/${jobId}?token=${opaqueToken}`;
+        const rawUrl = `${WS_HOST}/v1/ws/jobs/${jobId}?token=${opaqueToken}`;
         const wsUrl = rawUrl.startsWith("ws")
           ? rawUrl
           : `ws://${location.host}${rawUrl}`;
