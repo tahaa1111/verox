@@ -8,7 +8,10 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 
-from google.cloud import storage
+# NOTE: google.cloud.storage is imported LAZILY inside _client() to avoid
+# hanging Celery startup. GCS credentials require a metadata-server round-trip
+# on cold starts; a module-level import causes the worker to silently freeze
+# before the Celery banner is printed.
 
 _CROPS_BUCKET = os.getenv("GCS_CROPS_BUCKET", "")
 _MODELS_BUCKET = os.getenv("GCS_MODELS_BUCKET", "")
@@ -16,7 +19,8 @@ _RAW_BUCKET = os.getenv("GCS_RAW_BUCKET", "")
 
 
 @lru_cache(maxsize=1)
-def _client() -> storage.Client:
+def _client():
+    from google.cloud import storage  # lazy — avoids metadata-server hang on startup
     return storage.Client()
 
 
