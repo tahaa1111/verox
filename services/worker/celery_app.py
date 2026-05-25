@@ -73,55 +73,10 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
-# Pre-warm all lazy-init caches when the worker process is ready.
-# Builds the spaCy NER pipeline, spell dictionary, and drug normalizer indexes
-# at startup so the FIRST job never pays the cold-build cost (~20 min cold).
+# NOTE: worker_ready signal pre-warm was removed — importing celery.signals
+# at module level in celery_app.py interfered with Celery's startup and
+# prevented the worker from connecting to Redis (silent hang, no logs).
+# Cold-start cost is now handled at image-build time: the Dockerfile bakes
+# the spaCy NER model via nlp.to_disk() so it loads in <5 s at runtime.
+# Other indexes (spell, drug normalizer) load lazily on first task invocation.
 # ---------------------------------------------------------------------------
-from celery.signals import worker_ready  # noqa: E402
-
-
-@worker_ready.connect
-def _pre_warm_caches(sender, **kwargs):  # noqa: ANN001
-    """Kick off cache warm-up in a background daemon thread.
-
-    Runs immediately after Celery is ready so the main worker loop
-    is NOT blocked — the first job may still trigger a cold build if
-    it arrives before warm-up finishes, but subsequent jobs are instant.
-    """
-    import threading
-    t = threading.Thread(target=_do_pre_warm, name="prewarm", daemon=True)
-    t.start()
-
-
-def _do_pre_warm() -> None:
-    """Build all @lru_cache heavy indexes once, in the background."""
-    import logging
-    log = logging.getLogger("medibox.worker.prewarm")
-
-    try:
-        from services.worker.utils.medical_ner import _build_nlp
-        _build_nlp()
-        log.info("pre_warm: NER pipeline ready")
-    except Exception as exc:  # noqa: BLE001
-        log.warning("pre_warm: NER failed — %s", exc)
-
-    try:
-        from services.worker.utils.medical_spellcheck import _build_spell
-        _build_spell()
-        log.info("pre_warm: spell dictionary ready")
-    except Exception as exc:  # noqa: BLE001
-        log.warning("pre_warm: spell failed — %s", exc)
-
-    try:
-        from services.worker.utils.drug_normalizer import _build_indexes
-        _build_indexes()
-        log.info("pre_warm: drug normalizer indexes ready")
-    except Exception as exc:  # noqa: BLE001
-        log.warning("pre_warm: drug normalizer failed — %s", exc)
-
-    try:
-        from services.worker.utils.specialty_validator import _load_drug_descriptions
-        _load_drug_descriptions()
-        log.info("pre_warm: specialty drug descriptions ready")
-    except Exception as exc:  # noqa: BLE001
-        log.warning("pre_warm: specialty validator failed — %s", exc)
