@@ -12,6 +12,10 @@ export interface Medication {
   drug_class: string | null;
   confidence?: number | null;
   cnam: boolean;
+  /** Specialty–drug coherence check result */
+  specialty_match: "confirmed" | "neutral" | "possible" | "mismatch" | null;
+  specialty_match_score: number | null;
+  specialty_note: string | null;
 }
 
 export interface PatientInfo {

@@ -5,6 +5,31 @@ interface Props {
   medications: Medication[];
 }
 
+/** Color-coded badge for specialty–drug coherence result */
+function SpecialtyBadge({ match, note }: { match: Medication["specialty_match"]; note: string | null }) {
+  if (!match || match === "neutral") {
+    return <span className="text-gray-300 text-xs">—</span>;
+  }
+  const styles: Record<string, string> = {
+    confirmed: "bg-green-100 text-green-800 border border-green-200",
+    possible:  "bg-yellow-100 text-yellow-800 border border-yellow-200",
+    mismatch:  "bg-red-100 text-red-800 border border-red-200",
+  };
+  const labels: Record<string, string> = {
+    confirmed: "✓ Match",
+    possible:  "~ Possible",
+    mismatch:  "✗ Mismatch",
+  };
+  return (
+    <span
+      className={`inline-block px-2 py-0.5 rounded text-xs font-semibold cursor-default ${styles[match] ?? ""}`}
+      title={note ?? match}
+    >
+      {labels[match] ?? match}
+    </span>
+  );
+}
+
 export function MedicationTable({ medications }: Props) {
   if (!medications.length) {
     return <p className="text-gray-500 text-sm italic">No medications extracted.</p>;
@@ -21,6 +46,7 @@ export function MedicationTable({ medications }: Props) {
             <th className="px-4 py-3">Duration</th>
             <th className="px-4 py-3">Qty</th>
             <th className="px-4 py-3 text-center">CNAM</th>
+            <th className="px-4 py-3 text-center">Specialty</th>
             <th className="px-4 py-3">Confidence</th>
           </tr>
         </thead>
@@ -54,6 +80,9 @@ export function MedicationTable({ medications }: Props) {
                 ) : (
                   <span className="text-gray-300 text-xs">—</span>
                 )}
+              </td>
+              <td className="px-4 py-3 text-center">
+                <SpecialtyBadge match={med.specialty_match} note={med.specialty_note} />
               </td>
               <td className="px-4 py-3"><ConfidenceBadge value={med.confidence} /></td>
             </tr>
