@@ -160,6 +160,15 @@ def run_pipeline(self, job_id: str, payload: dict, gcs_prefix: str) -> dict:
             final_result["patient_name"] = encrypt_pii(final_result["patient_name"])
         if final_result.get("doctor_name"):
             final_result["doctor_name"] = encrypt_pii(final_result["doctor_name"])
+        # Also encrypt PII inside the nested patient / doctor objects (new schema)
+        if final_result.get("patient") and isinstance(final_result["patient"], dict):
+            if final_result["patient"].get("name"):
+                final_result["patient"]["name"] = encrypt_pii(final_result["patient"]["name"])
+            if final_result["patient"].get("last_name"):
+                final_result["patient"]["last_name"] = encrypt_pii(final_result["patient"]["last_name"])
+        if final_result.get("doctor") and isinstance(final_result["doctor"], dict):
+            if final_result["doctor"].get("name"):
+                final_result["doctor"]["name"] = encrypt_pii(final_result["doctor"]["name"])
 
         postprocessing_ms = int((time.perf_counter() - t2) * 1000)
         total_ms = int((time.perf_counter() - t_global) * 1000)

@@ -92,6 +92,19 @@ async def get_result(
         result["patient_name"] = decrypt_pii(result["patient_name"])
     if result.get("doctor_name"):
         result["doctor_name"] = decrypt_pii(result["doctor_name"])
+    # Also decrypt PII inside the nested patient / doctor objects (new schema)
+    if result.get("patient") and isinstance(result["patient"], dict):
+        p = dict(result["patient"])
+        if p.get("name"):
+            p["name"] = decrypt_pii(p["name"])
+        if p.get("last_name"):
+            p["last_name"] = decrypt_pii(p["last_name"])
+        result["patient"] = p
+    if result.get("doctor") and isinstance(result["doctor"], dict):
+        d = dict(result["doctor"])
+        if d.get("name"):
+            d["name"] = decrypt_pii(d["name"])
+        result["doctor"] = d
     result["disclaimer"] = DISCLAIMER
     return {
         "job_id": str(job.id),
@@ -188,6 +201,19 @@ async def websocket_result(
                 result["patient_name"] = decrypt_pii(result["patient_name"])
             if result.get("doctor_name"):
                 result["doctor_name"] = decrypt_pii(result["doctor_name"])
+            # Also decrypt PII inside the nested patient / doctor objects (new schema)
+            if result.get("patient") and isinstance(result["patient"], dict):
+                p = dict(result["patient"])
+                if p.get("name"):
+                    p["name"] = decrypt_pii(p["name"])
+                if p.get("last_name"):
+                    p["last_name"] = decrypt_pii(p["last_name"])
+                result["patient"] = p
+            if result.get("doctor") and isinstance(result["doctor"], dict):
+                d = dict(result["doctor"])
+                if d.get("name"):
+                    d["name"] = decrypt_pii(d["name"])
+                result["doctor"] = d
             result["disclaimer"] = DISCLAIMER
             current_event = {"event": "completed", "job_id": job_id, "result": result,
                              "ts": datetime.now(timezone.utc).isoformat()}

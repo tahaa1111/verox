@@ -427,22 +427,70 @@ def _normalize_schema(parsed: dict, job_id: str, session_id: str) -> dict:
                 "specialty_match":       "neutral",
                 "specialty_match_score": 0.6,
                 "specialty_note":        "",
-                # Dosage
+                # Dosage / usage
                 "dosage": m.get("dosage"),
                 "dosage_normalized": None,
                 "frequency": m.get("frequency"),
                 "duration": m.get("duration"),
+                "quantity": m.get("quantity"),       # number of boxes/units
                 "instructions": m.get("instructions"),
                 "warnings": m.get("warnings"),
+                "cnam": bool(m.get("cnam", False)),  # reimbursement flag
                 "track_id": int(m.get("track_id", 0)),
                 "field_confidences": {"drug_name": 0.0, "dosage": 0.0, "frequency": 0.0},
             })
+
+    # ── Patient / Doctor: support both new nested schema and old flat fields ──
+    # New model schema: patient.name / patient.last_name / doctor.name / doctor.stamp
+    # Old model schema: patient_name (flat) / doctor_name (flat)
+    patient_raw = parsed.get("patient") or {}
+    if not isinstance(patient_raw, dict):
+        patient_raw = {}
+    doctor_raw = parsed.get("doctor") or {}
+    if not isinstance(doctor_raw, dict):
+        doctor_raw = {}
+
+    # Flat patient_name: prefer explicit flat field, fall back to nested patient.name
+    patient_name_val = (
+        parsed.get("patient_name")
+        or patient_raw.get("name")
+        or None
+    )
+    # Flat doctor_name: prefer explicit flat field, fall back to nested doctor.name
+    doctor_name_val = (
+        parsed.get("doctor_name")
+        or doctor_raw.get("name")
+        or None
+    )
+
+    # Structured patient object (new schema) — None when both name and last_name are absent
+    patient_obj = None
+    if patient_raw:
+        patient_obj = {
+            "name":       patient_raw.get("name") or patient_name_val,
+            "last_name":  patient_raw.get("last_name") or None,
+            "address":    patient_raw.get("address") or None,
+            "profession": patient_raw.get("profession") or None,
+        }
+
+    # Structured doctor object (new schema) — None when name is absent
+    doctor_obj = None
+    if doctor_raw:
+        doctor_obj = {
+            "name":  doctor_raw.get("name") or doctor_name_val,
+            "stamp": doctor_raw.get("stamp") or None,
+        }
+
     return {
         "job_id": job_id,
         "session_id": session_id,
         "prescription_id": parsed.get("prescription_id") or None,
-        "patient_name": parsed.get("patient_name") or None,
-        "doctor_name": parsed.get("doctor_name") or None,
+        # Flat legacy fields (kept for backward compat + PII encryption pipeline)
+        "patient_name": patient_name_val,
+        "doctor_name": doctor_name_val,
+        # Structured patient / doctor objects (new schema — used by frontend PatientCard)
+        "patient": patient_obj,
+        "doctor": doctor_obj,
         "issue_date": parsed.get("issue_date") or None,
         "medications": meds,
         "additional_notes": parsed.get("additional_notes") or None,
