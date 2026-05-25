@@ -292,11 +292,19 @@ export function ResultsPage() {
   const isLoading = !job || (job.status !== "completed" && job.status !== "failed" && job.status !== "cancelled");
   const result: PrescriptionResult | null = job?.result as PrescriptionResult | null;
 
-  // A result "looks like a prescription" if it has ≥1 medication OR has patient/doctor info
+  const needsReview = !!(result?.requires_human_review);
+  const reviewReasons: string[] = result?.review_reasons ?? [];
+  // image_type from model. Old results without the field default to "prescription".
+  const imageType = result?.image_type ?? "prescription";
+
+  // "Prescription detected" section only shows for actual prescriptions with content,
+  // not for drug boxes, unknown images, blank images, or all-zero-confidence results.
   const isPrescription = result
-    ? (result.medications?.length ?? 0) > 0 ||
+    ? imageType === "prescription" &&
+      ((result.medications?.length ?? 0) > 0 ||
       !!(result.patient?.name ?? result.patient_name) ||
-      !!(result.doctor?.name ?? result.doctor_name)
+      !!(result.doctor?.name ?? result.doctor_name)) &&
+      !reviewReasons.includes("all_drugs_low_confidence")
     : false;
 
   const cropTexts = result?.crop_texts ?? [];
@@ -404,8 +412,55 @@ export function ResultsPage() {
             </div>
           ) : null}
 
-          {/* Not-a-prescription notice */}
-          {!isPrescription && overallConf < 0.3 && (
+          {/* ── Non-prescription image type banners ── */}
+          {imageType === "drug_box" && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-4 flex items-start gap-3">
+              <span className="text-2xl">💊</span>
+              <div>
+                <p className="text-sm font-semibold text-blue-800">Drug Box / Medication Packaging</p>
+                <p className="text-xs text-blue-700 mt-0.5">
+                  This image shows a medication box or packaging — not a prescription.
+                  No prescription data was extracted. Please upload a doctor's prescription instead.
+                </p>
+                {result?.extracted_raw_text && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    Text on box: <span className="font-mono">{result.extracted_raw_text}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {imageType === "blank" && (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-4 flex items-start gap-3">
+              <span className="text-2xl">🖼️</span>
+              <div>
+                <p className="text-sm font-semibold text-gray-700">Blank / Unreadable Image</p>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  The image appears to be empty or unreadable. Please upload a clear photo of the prescription.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {imageType === "unknown" && (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-4 flex items-start gap-3">
+              <span className="text-2xl">❓</span>
+              <div>
+                <p className="text-sm font-semibold text-orange-800">Unrecognized Image</p>
+                <p className="text-xs text-orange-700 mt-0.5">
+                  This image does not appear to be a medical prescription.
+                  Please upload a doctor's prescription to extract medication data.
+                </p>
+                {result?.extracted_raw_text && (
+                  <p className="text-xs text-orange-600 mt-1 font-mono">{result.extracted_raw_text}</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Low confidence fallback (old model, no image_type) */}
+          {imageType === "prescription" && !isPrescription && overallConf < 0.3 && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800 flex items-start gap-2">
               <svg className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -414,7 +469,6 @@ export function ResultsPage() {
               <span>
                 <strong>Low confidence ({(overallConf * 100).toFixed(0)}%).</strong> The image may not be a prescription,
                 or the text was not legible enough to extract structured data.
-                The raw text above contains everything that was detected.
               </span>
             </div>
           )}
@@ -424,9 +478,15 @@ export function ResultsPage() {
             <>
               <div className="flex items-center gap-3">
                 <h2 className="text-base font-semibold text-gray-800">Prescription Structure</h2>
-                <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-100 font-medium">
-                  Prescription detected
-                </span>
+                {needsReview ? (
+                  <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 font-medium">
+                    ⚠ Needs review
+                  </span>
+                ) : (
+                  <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-100 font-medium">
+                    ✓ Prescription detected
+                  </span>
+                )}
               </div>
 
               {/* Low-confidence warning */}

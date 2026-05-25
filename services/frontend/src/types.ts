@@ -65,6 +65,15 @@ export interface PrescriptionResult {
    * Populated from the model's cell_texts output merged with Pi YOLO confidence.
    */
   crop_texts: CropText[];
+  /**
+   * Model-classified image category.
+   * "prescription" — doctor's prescription (normal flow)
+   * "drug_box"     — medication packaging / box / label
+   * "unknown"      — unrelated image (phone, food, etc.)
+   * "blank"        — empty or unreadable image
+   * Absent on old results → treat as "prescription".
+   */
+  image_type?: "prescription" | "drug_box" | "unknown" | "blank";
   /** True if the structured fields look like a prescription. */
   requires_human_review?: boolean;
   review_reasons?: string[];

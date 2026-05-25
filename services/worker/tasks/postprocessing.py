@@ -348,6 +348,29 @@ def run_postprocessing(
         if calibrated_conf < 0.5:
             review_reasons.append("low_overall_confidence")
 
+    # Flag hallucination risk: all extracted drugs have near-zero per-drug confidence
+    # (model's own logprobs were effectively zero — likely hallucinated from a blank/noisy image).
+    meds_list = result.get("medications", [])
+    if meds_list:
+        low_conf_drugs = [
+            m for m in meds_list
+            if (m.get("confidence") or 0.0) < 0.05
+        ]
+        if len(low_conf_drugs) == len(meds_list):
+            requires_review = True
+            if "all_drugs_low_confidence" not in review_reasons:
+                review_reasons.append("all_drugs_low_confidence")
+
+    # Non-prescription image types always require review and clear any medication results
+    image_type = result.get("image_type", "prescription")
+    if image_type in ("drug_box", "unknown", "blank"):
+        requires_review = True
+        reason_key = f"image_type_{image_type}"
+        if reason_key not in review_reasons:
+            review_reasons.append(reason_key)
+        # Ensure medications list is empty for non-prescription images
+        result["medications"] = []
+
     result["requires_human_review"] = requires_review
     result["review_reasons"] = review_reasons
     result["model_version"] = model_version
@@ -425,6 +448,10 @@ def _normalize_schema(parsed: dict, job_id: str, session_id: str) -> dict:
         "additional_notes": parsed.get("additional_notes") or None,
         "extracted_raw_text": str(parsed.get("extracted_raw_text", "")),
         "overall_confidence": float(parsed.get("overall_confidence", 0.0)),
+        # image_type: model-classified image category
+        # Values: "prescription" | "drug_box" | "unknown" | "blank"
+        # Defaults to "prescription" for backward compat with old model outputs.
+        "image_type": parsed.get("image_type") or "prescription",
         "requires_human_review": False,
         "review_reasons": [],
         # Doctor normalization fields (populated in step 4b)
