@@ -85,8 +85,20 @@ async def verify_firebase_token(
 
 
 def verify_device_claim(claims: dict[str, Any], device_id: str) -> None:
-    """Ensure JWT device_id claim matches payload device_id."""
-    if claims.get("device_id") != device_id:
+    """Ensure JWT device_id claim matches payload device_id.
+
+    Pi devices have a device_id claim in their Firebase custom token — must match exactly.
+    Regular browser users have no device_id claim — allowed to use any 'web-' prefixed id.
+    """
+    jwt_device_id = claims.get("device_id")
+    if jwt_device_id is None:
+        if not device_id.startswith("web-"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Browser sessions must use a 'web-' prefixed device_id",
+            )
+        return
+    if jwt_device_id != device_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="device_id claim does not match payload",
