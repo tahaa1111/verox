@@ -142,11 +142,19 @@ def _call_local_vllm(
     import httpx
     system_prompt = _load_system_prompt()
     bbox_hints = _build_bbox_hints(crop_slots)
+    strip_note = (
+        "These cells are HORIZONTAL STRIPS of the SAME prescription, ordered top→bottom.\n"
+        "Top cells = doctor header + date. Middle cells = patient + medications. "
+        "Bottom cells = remaining medications + CNAM + instructions.\n"
+        "If a cell contains a drug BOX (packaging) instead of prescription text, "
+        "mark it as cell_type=drug_box and do NOT extract medications from it.\n"
+        "Combine ALL prescription cells into one unified JSON result.\n"
+    )
     user_text = (
         f"{bbox_hints}"
-        f"Extract prescriptions from all {cell_count} cell(s). "
-        f"Use the spatial context above to distinguish patient info (typically top) "
-        f"from medication lists (typically center/bottom). Return JSON."
+        f"{strip_note}"
+        f"Extract the complete prescription from all {cell_count} cell(s). "
+        f"Return JSON."
     )
     payload = {
         "model": _VLLM_MODEL,

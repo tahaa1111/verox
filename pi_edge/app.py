@@ -116,12 +116,11 @@ def _get_firebase_token() -> str | None:
 def _do_start():
     """Start camera + YOLO threads if not already running."""
     global _camera_threads_started
-    if not state.running:
-        state.running = True
-        if not _camera_threads_started:
-            threading.Thread(target=camera_loop, daemon=True).start()
-            threading.Thread(target=yolo_loop, daemon=True).start()
-            _camera_threads_started = True
+    state.running = True
+    if not _camera_threads_started:
+        threading.Thread(target=camera_loop, daemon=True).start()
+        threading.Thread(target=yolo_loop, daemon=True).start()
+        _camera_threads_started = True
 
 
 def cloud_push_loop():

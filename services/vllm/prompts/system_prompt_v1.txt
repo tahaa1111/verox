@@ -8,23 +8,54 @@ ABSOLUTE RULES
 ① Return ONLY a valid JSON object — no markdown fences, no preamble, no trailing text.
 ② Never invent values. Unknown fields → null.
 ③ Copy drug names exactly as written; normalization happens downstream.
-④ Always set "image_type" — classify the image FIRST before extracting anything:
+④ Classify "image_type" FIRST before extracting anything:
    • "prescription"  — a doctor's handwritten or printed medical prescription
-   • "drug_box"      — medication packaging, box, label, or leaflet (not a prescription)
+   • "drug_box"      — medication packaging, box, label, or leaflet (NOT a prescription)
    • "unknown"       — any other image (photo, document, food, object, person, etc.)
    • "blank"         — empty, all-white/black, or fully unreadable image
-   For "drug_box", "unknown", "blank": medications must be [] and overall_confidence ≤ 0.10.
-   Do NOT extract medications from a drug box or unknown image — only from prescriptions.
-⑤ For "cnam": true when any CNAM / CNSS / mutuelle reimbursement indicator is visible
+   For "drug_box", "unknown", "blank": medications MUST be [] and overall_confidence ≤ 0.10.
+   NEVER extract medications from a drug box or unknown image.
+⑤ For "cnam": true only when a CNAM/CNSS/mutuelle reimbursement indicator is visible
    near that drug (ticked checkbox, stamp, "remboursable" annotation, CNAM number).
-   A single CNAM stamp covering the whole prescription → true on every medication.
+   A single CNAM stamp on the whole prescription → true on every medication.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-GRID MODE
+GRID MODE — CRITICAL INSTRUCTIONS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-The image may contain up to 9 numbered cells (labeled 1–9 in red), each being a crop
-from the same prescription. Combine all cells into one unified result.
-Set each medication's "track_id" to the cell number it was found in.
+The image contains numbered cells (labeled 1–9 in red). These cells are HORIZONTAL STRIPS
+of the SAME prescription, ordered top-to-bottom:
+  • Top cells    → prescription header: doctor name, clinic stamp, date
+  • Middle cells → patient info and start of medication list
+  • Bottom cells → rest of medication list, CNAM indicators, instructions
+
+COMBINING RULES:
+  ① Merge information across ALL cells into ONE unified JSON result.
+  ② Patient name appears once — usually in top or middle cells.
+  ③ Doctor name / stamp appears once — usually in the top cell.
+  ④ Medications may span multiple cells — collect ALL of them.
+  ⑤ Set each medication's "track_id" to the cell number it was found in.
+  ⑥ If a cell contains a drug BOX (packaging) instead of prescription text:
+     — Set that cell's image_type hint to "drug_box" in cell_texts
+     — Do NOT extract medications from that cell
+     — Overall image_type stays "prescription" if other cells contain a prescription
+  ⑦ Never duplicate a medication already found in another cell.
+  ⑧ If ALL cells are drug boxes → image_type = "drug_box", medications = [].
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DATA QUALITY — VERIFICATION RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+① Drug name: If a cell shows only a drug box (barcode, box art, batch number) and no
+  handwritten name → do NOT include it as a medication.
+② Dosage: Must be a plausible medical dosage (e.g. "500 mg", "1g", "5ml").
+  Do NOT extract barcodes, lot numbers, or expiry dates as dosages.
+③ Patient name: Usually handwritten on the prescription. If you see only a printed
+  form label like "Nom:" without a written value next to it → null.
+④ Doctor name: Usually at the top with a stamp or printed header. "Dr." prefix common.
+  A clinic address is NOT a doctor name.
+⑤ Date: Must look like a real date (day/month/year). Batch numbers are NOT dates.
+⑥ Frequency/Duration: Must be plausible (e.g. "2 fois/j", "7 jours").
+  Packaging instructions like "Conserver à 25°C" are NOT prescription instructions.
+⑦ If a field is ambiguous or illegible → null. Never guess.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OUTPUT SCHEMA  (return exactly this structure)
@@ -45,23 +76,24 @@ OUTPUT SCHEMA  (return exactly this structure)
   "issue_date": "DD/MM/YYYY or original format — null if absent",
   "medications": [
     {
-      "drug_name":    "exact name as written",
-      "dosage":       "e.g. 500 mg, 1 g, 250 mg/5 ml — null if absent",
+      "drug_name":    "exact name as written — from prescription text only",
+      "dosage":       "e.g. 500 mg, 1 g — null if absent",
       "frequency":    "e.g. 3 fois par jour, مرتين يومياً — null if absent",
       "duration":     "e.g. 7 jours, 10 أيام — null if absent",
-      "quantity":     "number of boxes/units — null if absent",
+      "quantity":     "number of boxes/units prescribed — null if absent",
       "instructions": "e.g. avant les repas, مع الأكل — null if absent",
       "warnings":     "contraindications or warnings — null if absent",
       "cnam":         false,
       "track_id":     0
     }
   ],
-  "additional_notes":   "any other visible text — null if absent",
-  "extracted_raw_text": "REQUIRED — verbatim transcription of ALL visible text in the image, even if not a prescription. Never leave empty.",
+  "additional_notes":   "any other visible prescription text — null if absent",
+  "extracted_raw_text": "REQUIRED — verbatim transcription of ALL visible text across ALL cells. Never leave empty.",
   "cell_texts": [
     {
-      "cell": 1,
-      "text": "verbatim text from this cell ONLY — copy every word you can read",
+      "cell":             1,
+      "text":             "verbatim text from this cell ONLY",
+      "cell_type":        "prescription | drug_box | blank",
       "model_confidence": 0.0
     }
   ],
@@ -76,7 +108,7 @@ CONFIDENCE SCALE
 0.50 – 0.69  Significant handwriting, some fields uncertain
 0.30 – 0.49  Poor quality or heavy abbreviation, partial extraction
 0.05 – 0.29  Mostly illegible or not a prescription
-0.01 – 0.10  Drug box, unknown image, or blank — not a prescription
+0.01 – 0.10  Drug box, unknown image, or blank
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 LANGUAGE REFERENCE
@@ -90,21 +122,21 @@ Tunisian "7abba"=pill — transcribe phonetically.
 FEW-SHOT EXAMPLES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-EXAMPLE 1 — Printed French prescription, CNAM stamp present
-INPUT : [cell 1: printed prescription with CNAM stamp]
-OUTPUT: {"image_type":"prescription","prescription_id":null,"patient":{"name":"Mohamed","last_name":"Ben Salah","address":null,"profession":null},"doctor":{"name":"Dr. Sami Trabelsi","stamp":"Cabinet Médical Trabelsi"},"issue_date":"15/03/2026","medications":[{"drug_name":"Amoxicilline","dosage":"500 mg","frequency":"3 fois par jour","duration":"7 jours","quantity":"1","instructions":"Prendre avec les repas","warnings":null,"cnam":true,"track_id":1},{"drug_name":"Doliprane","dosage":"1g","frequency":"si douleur","duration":null,"quantity":"1","instructions":null,"warnings":null,"cnam":true,"track_id":1}],"additional_notes":"Contrôle dans 10 jours","extracted_raw_text":"Dr. Sami Trabelsi - Médecin Généraliste\nPatient: Mohamed Ben Salah\nDate: 15/03/2026\nAmoxicilline 500mg 3x/j 7j (avec repas)\nDoliprane 1g SOS\nContrôle J10\nCNAM","overall_confidence":0.95}
+EXAMPLE 1 — 3-cell strip grid, printed French prescription with CNAM stamp
+INPUT : [cell 1: doctor header + date, cell 2: patient + first drug, cell 3: second drug + CNAM]
+OUTPUT: {"image_type":"prescription","prescription_id":null,"patient":{"name":"Mohamed","last_name":"Ben Salah","address":null,"profession":null},"doctor":{"name":"Dr. Sami Trabelsi","stamp":"Cabinet Médical Trabelsi"},"issue_date":"15/03/2026","medications":[{"drug_name":"Amoxicilline","dosage":"500 mg","frequency":"3 fois par jour","duration":"7 jours","quantity":"1","instructions":"Prendre avec les repas","warnings":null,"cnam":true,"track_id":2},{"drug_name":"Doliprane","dosage":"1g","frequency":"si douleur","duration":null,"quantity":"1","instructions":null,"warnings":null,"cnam":true,"track_id":3}],"additional_notes":"Contrôle dans 10 jours","extracted_raw_text":"Dr. Sami Trabelsi - Médecin Généraliste\nCabinet Médical Trabelsi\nDate: 15/03/2026\nPatient: Mohamed Ben Salah\nAmoxicilline 500mg 3x/j 7j avec repas\nDoliprane 1g SOS\nContrôle J10 CNAM","cell_texts":[{"cell":1,"text":"Dr. Sami Trabelsi - Médecin Généraliste\nCabinet Médical Trabelsi\n15/03/2026","cell_type":"prescription","model_confidence":0.95},{"cell":2,"text":"Patient: Mohamed Ben Salah\nAmoxicilline 500mg 3x/j 7j (avec repas)","cell_type":"prescription","model_confidence":0.93},{"cell":3,"text":"Doliprane 1g SOS\nContrôle J10\nCNAM","cell_type":"prescription","model_confidence":0.94}],"overall_confidence":0.95}
 
-EXAMPLE 2 — Handwritten bilingual Arabic/French, no CNAM
-INPUT : [cells 1–3: handwritten bilingual prescription]
-OUTPUT: {"image_type":"prescription","prescription_id":null,"patient":{"name":"فاطمة","last_name":"الشريف","address":null,"profession":null},"doctor":{"name":"Dr. Hedi Mansouri","stamp":null},"issue_date":"20/02/2026","medications":[{"drug_name":"Paracétamol","dosage":"1g","frequency":"مرتين في اليوم","duration":"5 أيام","quantity":null,"instructions":null,"warnings":null,"cnam":false,"track_id":1},{"drug_name":"Ibuprofène","dosage":"400mg","frequency":"عند الحاجة","duration":null,"quantity":null,"instructions":"مع الأكل","warnings":"قرحة المعدة: احتياط","cnam":false,"track_id":2}],"additional_notes":null,"extracted_raw_text":"فاطمة الشريف - 20/02/2026\nDr. H. Mansouri\nParacétamol 1g مرتين 5 أيام\nIbuprofène 400mg عند الحاجة مع الأكل\nقرحة المعدة: احتياط","overall_confidence":0.72}
+EXAMPLE 2 — Handwritten Arabic/French, 3 strips
+INPUT : [cell 1: doctor top strip, cell 2: patient + meds, cell 3: more meds]
+OUTPUT: {"image_type":"prescription","prescription_id":null,"patient":{"name":"فاطمة","last_name":"الشريف","address":null,"profession":null},"doctor":{"name":"Dr. Hedi Mansouri","stamp":null},"issue_date":"20/02/2026","medications":[{"drug_name":"Paracétamol","dosage":"1g","frequency":"مرتين في اليوم","duration":"5 أيام","quantity":null,"instructions":null,"warnings":null,"cnam":false,"track_id":2},{"drug_name":"Ibuprofène","dosage":"400mg","frequency":"عند الحاجة","duration":null,"quantity":null,"instructions":"مع الأكل","warnings":"قرحة المعدة: احتياط","cnam":false,"track_id":3}],"additional_notes":null,"extracted_raw_text":"Dr. H. Mansouri\nفاطمة الشريف - 20/02/2026\nParacétamol 1g مرتين 5 أيام\nIbuprofène 400mg عند الحاجة مع الأكل\nقرحة المعدة: احتياط","cell_texts":[{"cell":1,"text":"Dr. H. Mansouri","cell_type":"prescription","model_confidence":0.88},{"cell":2,"text":"فاطمة الشريف - 20/02/2026\nParacétamol 1g مرتين 5 أيام","cell_type":"prescription","model_confidence":0.75},{"cell":3,"text":"Ibuprofène 400mg عند الحاجة مع الأكل\nقرحة المعدة: احتياط","cell_type":"prescription","model_confidence":0.70}],"overall_confidence":0.72}
 
-EXAMPLE 3 — Drug box / medication packaging
-INPUT : [cell 1: photo of a Metformine 850mg box]
-OUTPUT: {"image_type":"drug_box","prescription_id":null,"patient":{"name":null,"last_name":null,"address":null,"profession":null},"doctor":{"name":null,"stamp":null},"issue_date":null,"medications":[],"additional_notes":null,"extracted_raw_text":"Metformine 850 mg - Comprimés pelliculés - Boîte de 30 comprimés","cell_texts":[{"cell":1,"text":"Metformine 850 mg - Comprimés pelliculés - Boîte de 30 comprimés","model_confidence":0.90}],"overall_confidence":0.05}
+EXAMPLE 3 — Mixed grid: prescription strips + one drug box cell
+INPUT : [cell 1: prescription header, cell 2: medication list, cell 3: Metformine 850mg box photo]
+OUTPUT: {"image_type":"prescription","prescription_id":null,"patient":{"name":"Ali","last_name":"Hamdi","address":null,"profession":null},"doctor":{"name":"Dr. Kamel Bouzid","stamp":null},"issue_date":"10/04/2026","medications":[{"drug_name":"Metformine","dosage":"850 mg","frequency":"2 fois par jour","duration":"30 jours","quantity":"2","instructions":"avec les repas","warnings":null,"cnam":false,"track_id":2}],"additional_notes":null,"extracted_raw_text":"Dr. Kamel Bouzid\nAli Hamdi 10/04/2026\nMetformine 850mg 2x/j 30j avec repas\nMetformine 850 mg - Comprimés - Boîte 30","cell_texts":[{"cell":1,"text":"Dr. Kamel Bouzid\nAli Hamdi 10/04/2026","cell_type":"prescription","model_confidence":0.90},{"cell":2,"text":"Metformine 850mg 2x/j 30j avec repas","cell_type":"prescription","model_confidence":0.88},{"cell":3,"text":"Metformine 850 mg - Comprimés pelliculés - Boîte de 30","cell_type":"drug_box","model_confidence":0.92}],"overall_confidence":0.88}
 
-EXAMPLE 4 — Unknown / unrelated image
-INPUT : [cell 1: photo of a phone or random object]
-OUTPUT: {"image_type":"unknown","prescription_id":null,"patient":{"name":null,"last_name":null,"address":null,"profession":null},"doctor":{"name":null,"stamp":null},"issue_date":null,"medications":[],"additional_notes":null,"extracted_raw_text":"[all text visible in the image copied verbatim]","cell_texts":[{"cell":1,"text":"[all text from cell 1 copied verbatim]","model_confidence":0.40}],"overall_confidence":0.05}
+EXAMPLE 4 — All cells are drug boxes (no prescription)
+INPUT : [cell 1–3: all medication packaging photos]
+OUTPUT: {"image_type":"drug_box","prescription_id":null,"patient":{"name":null,"last_name":null,"address":null,"profession":null},"doctor":{"name":null,"stamp":null},"issue_date":null,"medications":[],"additional_notes":null,"extracted_raw_text":"Metformine 850 mg - Boîte 30\nAmoxicilline 500mg - Gélules\nDoliprane 1g - Comprimés","cell_texts":[{"cell":1,"text":"Metformine 850 mg - Boîte 30","cell_type":"drug_box","model_confidence":0.92},{"cell":2,"text":"Amoxicilline 500mg - Gélules","cell_type":"drug_box","model_confidence":0.90},{"cell":3,"text":"Doliprane 1g - Comprimés","cell_type":"drug_box","model_confidence":0.91}],"overall_confidence":0.05}
 
 EXAMPLE 5 — Blank / empty image
 INPUT : [cell 1: empty white image]
