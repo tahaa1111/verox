@@ -298,32 +298,26 @@ def _compute_queue_wait(job_id: str) -> int:
 
 
 def _stream_to_bigquery(job_id: str, payload: dict, result: dict, model_version: str) -> None:
-    """Stream job result to BigQuery medibox.requests table (DD-015).
-
-    Silently skips when google-cloud-bigquery is not installed (it is kept
-    out of requirements.txt because grpcio interferes with Celery startup).
-    """
+    """Stream job result to BigQuery medibox.requests table (DD-015). Fire-and-forget."""
     try:
         from google.cloud import bigquery  # type: ignore[import]
-    except ImportError:
-        return  # BigQuery package not installed — skip without logging
-
-    try:
         project = os.getenv("GCP_PROJECT_ID", "")
         if not project:
             return
         client = bigquery.Client(project=project)
         rows = [{
-            "request_id": job_id,
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "device_id": payload.get("device_id", ""),
-            "latency_ms": result.get("timings_ms", {}).get("total", 0),
-            "model_version": model_version,
-            "ocr_text": result.get("extracted_raw_text", "")[:10000],
+            "request_id":     job_id,
+            "ts":             datetime.now(timezone.utc).isoformat(),
+            "device_id":      payload.get("device_id", ""),
+            "latency_ms":     result.get("timings_ms", {}).get("total", 0),
+            "model_version":  model_version,
+            "ocr_text":       result.get("extracted_raw_text", "")[:10000],
             "structured_json": result,
-            "confidence": result.get("overall_confidence", 0.0),
+            "confidence":     result.get("overall_confidence", 0.0),
         }]
-        client.insert_rows_json(f"{project}.medibox.requests", rows)
+        errors = client.insert_rows_json(f"{project}.medibox.requests", rows)
+        if errors:
+            logger.warning("bq_stream_failed", job_id=job_id, errors=errors)
     except Exception as exc:
         logger.warning("bq_stream_failed", job_id=job_id, exc=str(exc))
 
