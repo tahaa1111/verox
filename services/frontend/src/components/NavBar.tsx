@@ -19,6 +19,7 @@ export function NavBar() {
   // Regular operators see Camera + History. Admin users additionally see Admin.
   const links = [
     { to: "/", label: "Camera", exact: true },
+    { to: "/upload", label: "Upload", exact: false },
     { to: "/history", label: "History", exact: false },
     ...(isAdmin ? [{ to: "/admin", label: "Admin", exact: false }] : []),
   ];

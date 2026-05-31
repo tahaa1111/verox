@@ -12,6 +12,7 @@ import { CorrectionsPage } from "./pages/CorrectionsPage";
 import { AdminPage } from "./pages/AdminPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { QueuePage } from "./pages/QueuePage";
+import { UploadPage } from "./pages/UploadPage";
 
 /**
  * Firebase auth-gated SPA:
@@ -89,6 +90,7 @@ export default function App() {
             <Route path="/results/:jobId" element={<ResultsPage />} />
             {/* Legacy job tracker URL — redirect to new results path (preserves :jobId param) */}
             <Route path="/jobs/:jobId" element={<LegacyJobRedirect />} />
+            <Route path="/upload"  element={<UploadPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/queue"   element={<QueuePage />} />
             <Route path="/corrections/:jobId" element={<CorrectionsPage />} />

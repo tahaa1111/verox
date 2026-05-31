@@ -76,6 +76,29 @@ export async function cancelJob(jobId: string): Promise<void> {
 }
 
 /**
+ * Submit one or more base64-encoded images directly to the pipeline,
+ * bypassing the Pi/YOLO layer. Each image is treated as a full-frame crop.
+ * Returns the job_id for tracking via WebSocket / results page.
+ */
+export async function submitImages(
+  imagesB64: string[],
+  filename = "upload"
+): Promise<string> {
+  const crops = imagesB64.map((b64, i) => ({
+    image_base64: b64,
+    bbox:         [0, 0, 1, 1],
+    confidence:   1.0,
+    track_id:     i,
+  }));
+  const { data } = await http.post<SubmitResponse>("/submit", {
+    device_id:  "upload",
+    session_id: `upload-${Date.now()}-${filename.replace(/[^a-z0-9]/gi, "")}`,
+    crops,
+  });
+  return data.job_id;
+}
+
+/**
  * Exchange the Firebase JWT (Authorization header) for a short-lived opaque
  * WebSocket token (TTL: 30s). The opaque token is passed as ?token= in the
  * WebSocket URL so the Firebase JWT never appears in server logs or browser history.
