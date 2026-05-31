@@ -59,7 +59,7 @@ _CLOCK_SKEW = timedelta(minutes=5)
 
 
 class EdgePayload(BaseModel):
-    device_id: Annotated[str, Field(pattern=r"^pi-\d{2,4}$")]
+    device_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{0,31}$")]
     session_id: UUID
     timestamp: datetime
     crops: list[Crop] = Field(..., min_length=1, max_length=30)

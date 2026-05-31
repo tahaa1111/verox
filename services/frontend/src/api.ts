@@ -82,7 +82,6 @@ export async function cancelJob(jobId: string): Promise<void> {
  */
 export async function submitImages(
   imagesB64: string[],
-  filename = "upload"
 ): Promise<string> {
   const crops = imagesB64.map((b64, i) => ({
     image_base64: b64,
@@ -91,8 +90,9 @@ export async function submitImages(
     track_id:     i,
   }));
   const { data } = await http.post<SubmitResponse>("/submit", {
-    device_id:  "upload",
-    session_id: `upload-${Date.now()}-${filename.replace(/[^a-z0-9]/gi, "")}`,
+    device_id:  "web-upload",
+    session_id: crypto.randomUUID(),
+    timestamp:  new Date().toISOString(),
     crops,
   });
   return data.job_id;

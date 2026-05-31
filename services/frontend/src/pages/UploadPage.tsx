@@ -82,7 +82,7 @@ export function UploadPage() {
     for (const p of previews) {
       if (!p.b64) continue;
       try {
-        const jobId = await submitImages([p.b64], p.file.name);
+        const jobId = await submitImages([p.b64]);
         jobIds.push(jobId);
         addToQueue(jobId);
       } catch (e: unknown) {
