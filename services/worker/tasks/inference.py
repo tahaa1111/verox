@@ -20,7 +20,7 @@ from services.worker.celery_app import app as celery_app
 from services.worker.utils.grid_composer import compose_grids
 from services.worker.utils.gcs_client import upload_crop
 from services.worker.utils.safety_filter import SafetyFilterError, validate_all_crops
-from services.worker.utils.vertex_client import infer_grid
+from services.worker.utils.vllm_client import infer_grid
 from services.worker.tasks.postprocessing import run_postprocessing
 
 logger = structlog.get_logger(__name__)

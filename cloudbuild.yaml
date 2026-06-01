@@ -242,7 +242,7 @@ steps:
       # REDIS_URL (full URL with auth) comes from medibox-redis-url secret.
       # REDIS_AUTH_STRING (bare password) comes from medibox-redis-auth secret.
       # Never hardcode credentials here.
-      - --update-env-vars=^;^ENVIRONMENT=production;GCP_PROJECT_ID=$PROJECT_ID;GCP_REGION=${_REGION};GCS_CROPS_BUCKET=$PROJECT_ID-crops;GCS_MODELS_BUCKET=$PROJECT_ID-models;KMS_KEY_NAME=projects/$PROJECT_ID/locations/${_REGION}/keyRings/medibox/cryptoKeys/pii-key;CELERY_QUEUES=inference,default;VERTEX_ENDPOINT_ID=;VERTEX_ENDPOINT_REGION=us-central1;LOCAL_VLLM_URL=https://medibox-vllm-gpu-5w7o5tyr2q-uc.a.run.app
+      - --update-env-vars=^;^ENVIRONMENT=production;GCP_PROJECT_ID=$PROJECT_ID;GCP_REGION=${_REGION};GCS_CROPS_BUCKET=$PROJECT_ID-crops;GCS_MODELS_BUCKET=$PROJECT_ID-models;KMS_KEY_NAME=projects/$PROJECT_ID/locations/${_REGION}/keyRings/medibox/cryptoKeys/pii-key;CELERY_QUEUES=inference,default;VLLM_URL=https://api.runpod.ai/v2/REPLACE_WITH_ENDPOINT_ID/openai
     waitFor: [push-worker]
 
   # ---------------------------------------------------------------------------

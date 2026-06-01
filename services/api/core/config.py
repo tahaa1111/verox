@@ -58,11 +58,10 @@ class Settings(BaseSettings):
     firebase_project_id: str = ""
     firebase_credentials_path: str = ""  # path to JSON key (local dev only)
 
-    # Vertex AI
-    vertex_endpoint_id: str = ""
-    vertex_endpoint_region: str = "us-central1"
-    vertex_deployed_model_id: str = ""
-    local_vllm_url: str = "http://localhost:8000"  # fallback for local dev
+    # vLLM inference (RunPod or any OpenAI-compatible endpoint)
+    vllm_url: str = "http://localhost:8000"
+    vllm_api_key: str = ""
+    vllm_model: str = "qwen2.5-vl-7b-instruct"
 
     # GCS
     gcs_raw_bucket: str = ""
