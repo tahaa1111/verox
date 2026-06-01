@@ -48,7 +48,7 @@ steps:
     args:
       - -c
       - |
-        pip install ruff mypy --quiet
+        pip install "ruff==0.9.10" "mypy==1.14.1" --quiet
         ruff check services/ src/ tests/ --output-format=github
         MYPYPATH=. mypy services/api/ services/worker/ \
           --explicit-package-bases --ignore-missing-imports --no-error-summary

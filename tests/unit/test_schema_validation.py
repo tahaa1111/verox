@@ -40,11 +40,20 @@ class TestEdgePayload:
     def test_invalid_device_id_rejected(self):
         with pytest.raises(ValidationError):
             EdgePayload(
-                device_id="laptop-001",  # wrong pattern — must match ^pi-\d{2,4}$
+                device_id="INVALID DEVICE",  # uppercase + space fails ^[a-z][a-z0-9-]{0,31}$
                 session_id="550e8400-e29b-41d4-a716-446655440000",
                 timestamp=datetime.now(timezone.utc),
                 crops=[_make_crop()],
             )
+
+    def test_web_upload_device_id_passes(self):
+        payload = EdgePayload(
+            device_id="web-upload",
+            session_id="550e8400-e29b-41d4-a716-446655440000",
+            timestamp=datetime.now(timezone.utc),
+            crops=[_make_crop()],
+        )
+        assert payload.device_id == "web-upload"
 
     def test_invalid_session_id_rejected(self):
         with pytest.raises(ValidationError):
