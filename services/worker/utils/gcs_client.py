@@ -1,6 +1,12 @@
 """
-Google Cloud Storage client for crop upload / model artifact access.
-Replaces MinIO from the on-prem spec.
+Cloudflare R2 crop storage client (S3-compatible via boto3).
+Drop-in replacement for the old GCS client — same public API.
+
+Environment variables:
+  R2_ENDPOINT       — https://<account>.eu.r2.cloudflarestorage.com
+  R2_ACCESS_KEY_ID  — R2 API token access key
+  R2_SECRET_KEY     — R2 API token secret key
+  R2_BUCKET         — bucket name (medibox-crops)
 """
 
 from __future__ import annotations
@@ -8,45 +14,44 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 
-# NOTE: google.cloud.storage is imported LAZILY inside _client() to avoid
-# hanging Celery startup. GCS credentials require a metadata-server round-trip
-# on cold starts; a module-level import causes the worker to silently freeze
-# before the Celery banner is printed.
+import boto3
+from botocore.config import Config
 
-_CROPS_BUCKET = os.getenv("GCS_CROPS_BUCKET", "")
-_MODELS_BUCKET = os.getenv("GCS_MODELS_BUCKET", "")
-_RAW_BUCKET = os.getenv("GCS_RAW_BUCKET", "")
+_ENDPOINT   = os.getenv("R2_ENDPOINT", "")
+_ACCESS_KEY = os.getenv("R2_ACCESS_KEY_ID", "")
+_SECRET_KEY = os.getenv("R2_SECRET_KEY", "")
+_BUCKET     = os.getenv("R2_BUCKET", "medibox-crops")
 
 
 @lru_cache(maxsize=1)
 def _client():
-    from google.cloud import storage  # lazy — avoids metadata-server hang on startup
-    return storage.Client()
+    return boto3.client(
+        "s3",
+        endpoint_url=_ENDPOINT,
+        aws_access_key_id=_ACCESS_KEY,
+        aws_secret_access_key=_SECRET_KEY,
+        config=Config(signature_version="s3v4", retries={"max_attempts": 2}),
+    )
 
 
 def upload_crop(job_id: str, track_id: int, raw_bytes: bytes, content_type: str = "image/jpeg") -> str:
-    """Upload a crop image to the crops bucket. Returns the GCS URI."""
-    blob_name = f"{job_id}/crop_{track_id:04d}.jpg"
-    bucket = _client().bucket(_CROPS_BUCKET)
-    blob = bucket.blob(blob_name)
-    # Short timeout so network issues fail fast (GCS upload is best-effort)
-    blob.upload_from_string(raw_bytes, content_type=content_type, timeout=8)
-    return f"gs://{_CROPS_BUCKET}/{blob_name}"
+    """Upload a crop image to R2. Returns the public R2 URI."""
+    key = f"{job_id}/crop_{track_id:04d}.jpg"
+    _client().put_object(
+        Bucket=_BUCKET,
+        Key=key,
+        Body=raw_bytes,
+        ContentType=content_type,
+    )
+    return f"r2://{_BUCKET}/{key}"
 
 
 def upload_bytes(bucket_name: str, blob_name: str, data: bytes, content_type: str = "application/octet-stream") -> str:
-    """Generic upload. Returns GCS URI."""
-    bucket = _client().bucket(bucket_name)
-    blob = bucket.blob(blob_name)
-    blob.upload_from_string(data, content_type=content_type)
-    return f"gs://{bucket_name}/{blob_name}"
-
-
-def download_bytes(gcs_uri: str) -> bytes:
-    """Download from a gs:// URI. Returns bytes."""
-    if not gcs_uri.startswith("gs://"):
-        raise ValueError(f"Invalid GCS URI: {gcs_uri}")
-    path = gcs_uri[5:]
-    bucket_name, _, blob_name = path.partition("/")
-    bucket = _client().bucket(bucket_name)
-    return bucket.blob(blob_name).download_as_bytes()
+    """Generic upload. Returns R2 URI."""
+    _client().put_object(
+        Bucket=bucket_name,
+        Key=blob_name,
+        Body=data,
+        ContentType=content_type,
+    )
+    return f"r2://{bucket_name}/{blob_name}"

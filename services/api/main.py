@@ -93,8 +93,8 @@ app = FastAPI(
 # CORS — production: only the real frontend origins.
 #        development: also allow Vite dev server on localhost.
 _prod_origins = [
+    "https://verox-five.vercel.app",
     f"https://{settings.domain}",
-    "https://medibox-frontend-5w7o5tyr2q-uc.a.run.app",
 ]
 _dev_origins = [
     "http://localhost:5173",

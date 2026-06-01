@@ -75,14 +75,14 @@ def run_pipeline(self, job_id: str, payload: dict, gcs_prefix: str) -> dict:
 
         t0 = time.perf_counter()
 
-        # 2. Upload crops to GCS (best-effort — VPC network may block public egress)
+        # 2. Upload crops to R2 (best-effort)
         for crop in crops:
             track_id = crop.get("track_id", 0)
             raw_bytes = base64.b64decode(crop["image_base64"])
             try:
                 upload_crop(job_id, track_id, raw_bytes)
-            except Exception as gcs_exc:
-                log.warning("gcs_upload_skipped", track_id=track_id, reason=str(gcs_exc)[:120])
+            except Exception as r2_exc:
+                log.warning("r2_upload_skipped", track_id=track_id, reason=str(r2_exc)[:120])
 
         # 3. Compose grids
         grids = compose_grids(crops)
@@ -180,12 +180,11 @@ def run_pipeline(self, job_id: str, payload: dict, gcs_prefix: str) -> dict:
             "total": total_ms,
         }
 
-        # 7. Write to Postgres + stream to BigQuery
+        # 7. Write to Postgres
         _update_job(job_id, "completed", result=final_result,
                     timings=final_result["timings_ms"], model_version=active_model,
                     requires_review=final_result.get("requires_human_review", False),
                     review_reasons=final_result.get("review_reasons", []))
-        _stream_to_bigquery(job_id, payload, final_result, active_model)
 
         _ws_publish(job_id, {"event": "completed", "job_id": job_id,
                              "result": final_result, "ts": _now()})
@@ -296,30 +295,6 @@ def _compute_queue_wait(job_id: str) -> int:
         pass
     return 0
 
-
-def _stream_to_bigquery(job_id: str, payload: dict, result: dict, model_version: str) -> None:
-    """Stream job result to BigQuery medibox.requests table (DD-015). Fire-and-forget."""
-    try:
-        from google.cloud import bigquery  # type: ignore[import]
-        project = os.getenv("GCP_PROJECT_ID", "")
-        if not project:
-            return
-        client = bigquery.Client(project=project)
-        rows = [{
-            "request_id":     job_id,
-            "ts":             datetime.now(timezone.utc).isoformat(),
-            "device_id":      payload.get("device_id", ""),
-            "latency_ms":     result.get("timings_ms", {}).get("total", 0),
-            "model_version":  model_version,
-            "ocr_text":       result.get("extracted_raw_text", "")[:10000],
-            "structured_json": result,
-            "confidence":     result.get("overall_confidence", 0.0),
-        }]
-        errors = client.insert_rows_json(f"{project}.medibox.requests", rows)
-        if errors:
-            logger.warning("bq_stream_failed", job_id=job_id, errors=errors)
-    except Exception as exc:
-        logger.warning("bq_stream_failed", job_id=job_id, exc=str(exc))
 
 
 def _now() -> str:

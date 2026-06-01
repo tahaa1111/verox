@@ -1,5 +1,5 @@
 """
-Settings loaded from environment variables (Cloud Run injects Secret Manager values).
+Settings loaded from environment variables (Railway injects them as env vars).
 Never hard-code secrets. Local dev uses .env file.
 """
 
@@ -13,25 +13,23 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # GCP
-    gcp_project_id: str = ""
-    gcp_region: str = "us-central1"
-
-    # Cloud SQL (Auth Proxy injects the Unix socket path at /cloudsql/...)
-    db_user: str = "medibox"
+    # Database (Neon PostgreSQL)
+    db_user: str = "neondb_owner"
     db_password: str = ""
     db_host: str = "127.0.0.1"
     db_port: int = 5432
-    db_name: str = "medibox"
+    db_name: str = "neondb"
+    # Full connection URL — if set, takes priority over individual fields
+    database_url_override: str = ""
 
     @property
     def database_url(self) -> str:
-        if self.db_host.startswith("/"):
-            # Cloud SQL Auth Proxy Unix socket
-            return (
-                f"postgresql+asyncpg://{self.db_user}:{self.db_password}"
-                f"@/{self.db_name}?host={self.db_host}"
-            )
+        if self.database_url_override:
+            # asyncpg requires postgresql+asyncpg:// scheme
+            url = self.database_url_override
+            if url.startswith("postgresql://"):
+                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            return url
         return (
             f"postgresql+asyncpg://{self.db_user}:{self.db_password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
@@ -39,17 +37,19 @@ class Settings(BaseSettings):
 
     @property
     def database_url_sync(self) -> str:
-        if self.db_host.startswith("/"):
-            return (
-                f"postgresql+psycopg2://{self.db_user}:{self.db_password}"
-                f"@/{self.db_name}?host={self.db_host}"
-            )
+        if self.database_url_override:
+            url = self.database_url_override
+            if url.startswith("postgresql://"):
+                url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            elif url.startswith("postgresql+asyncpg://"):
+                url = url.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
+            return url
         return (
             f"postgresql+psycopg2://{self.db_user}:{self.db_password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
         )
 
-    # Memorystore Redis
+    # Redis (Upstash)
     redis_url: str = "redis://localhost:6379/0"
     redis_auth_string: str = ""
     maintenance_redis_key: str = "medibox:maintenance"
@@ -63,34 +63,34 @@ class Settings(BaseSettings):
     vllm_api_key: str = ""
     vllm_model: str = "qwen2.5-vl-7b-instruct"
 
-    # GCS
-    gcs_raw_bucket: str = ""
-    gcs_crops_bucket: str = ""
-    gcs_models_bucket: str = ""
+    # Cloudflare R2
+    r2_endpoint: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_key: str = ""
+    r2_bucket: str = "medibox-crops"
 
-    # KMS (envelope encryption)
-    kms_key_name: str = ""
-    pii_dev_key: str = ""  # local dev only fallback
+    # PII encryption (Fernet key — generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+    pii_encryption_key: str = ""
 
     # App
     environment: str = "production"
     log_level: str = "info"
-    domain: str = ""
+    domain: str = "verox-five.vercel.app"
 
     # Celery
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/1"
 
     # Camera relay
-    camera_secret: str = "medibox-camera-dev-secret"  # override via CAMERA_SECRET env var
+    camera_secret: str = "medibox-camera-dev-secret"
 
     # Rate limiting
-    rate_limit_per_device: int = 60     # requests per minute
+    rate_limit_per_device: int = 60
     rate_limit_burst: int = 10
 
-    # Connection pool (see RISKS.md R-15)
-    db_pool_size: int = 2
-    db_max_overflow: int = 1
+    # Connection pool
+    db_pool_size: int = 5
+    db_max_overflow: int = 2
 
 
 @lru_cache

@@ -1,0 +1,65 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: Lint + Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: |
+          pip install -r services/api/requirements.txt \
+                      -r services/worker/requirements.txt \
+                      ruff mypy pytest pytest-asyncio --quiet
+
+      - name: Lint
+        run: ruff check services/ tests/ --output-format=github
+
+      - name: Type check
+        run: |
+          MYPYPATH=. mypy services/api/ services/worker/ \
+            --explicit-package-bases --ignore-missing-imports \
+            --disable-error-code=import-untyped --no-error-summary
+
+      - name: Unit tests
+        run: pytest tests/unit/ -v --tb=short
+
+  deploy-api:
+    name: Deploy API → Railway
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy API
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service medibox-api --detach
+
+  deploy-worker:
+    name: Deploy Worker → Railway
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Worker
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service medibox-worker --detach
