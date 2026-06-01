@@ -1,0 +1,79 @@
+{
+  "title": "Medibox — Security Dashboard",
+  "uid": "medibox-security",
+  "tags": ["medibox", "security"],
+  "timezone": "browser",
+  "refresh": "10s",
+  "time": { "from": "now-3h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Auth Failures (1h)",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "sum(increase(auth_failures_total[1h]))", "legendFormat": "failures" }],
+      "options": {
+        "colorMode": "background",
+        "thresholds": { "steps": [
+          { "color": "green", "value": null },
+          { "color": "yellow", "value": 5 },
+          { "color": "red", "value": 20 }
+        ]}
+      }
+    },
+    {
+      "id": 2, "type": "stat", "title": "Rate Limit Hits (1h)",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "sum(increase(rate_limit_hits_total[1h]))", "legendFormat": "hits" }]
+    },
+    {
+      "id": 3, "type": "stat", "title": "Brute Force Events",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "sum(increase(suspicious_requests_total{type='brute_force'}[1h]))", "legendFormat": "events" }],
+      "options": {
+        "colorMode": "background",
+        "thresholds": { "steps": [
+          { "color": "green", "value": null },
+          { "color": "red", "value": 1 }
+        ]}
+      }
+    },
+    {
+      "id": 4, "type": "stat", "title": "Blocked IP Attempts (1h)",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "sum(increase(suspicious_requests_total{type='blocked_ip_attempt'}[1h]))", "legendFormat": "attempts" }]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Auth Failures by Reason",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "sum(rate(auth_failures_total[5m])) by (reason)",
+        "legendFormat": "{{ reason }}"
+      }]
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Rate Limit Hits by Layer",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "sum(rate(rate_limit_hits_total[5m])) by (layer)",
+        "legendFormat": "{{ layer }}"
+      }]
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Suspicious Activity Over Time",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 8 },
+      "targets": [
+        { "expr": "sum(rate(suspicious_requests_total{type='brute_force'}[5m]))", "legendFormat": "brute force" },
+        { "expr": "sum(rate(suspicious_requests_total{type='blocked_ip_attempt'}[5m]))", "legendFormat": "blocked IP" },
+        { "expr": "sum(rate(auth_failures_total[5m]))", "legendFormat": "auth failures" },
+        { "expr": "sum(rate(rate_limit_hits_total[5m]))", "legendFormat": "rate limit hits" }
+      ]
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Admin Actions",
+      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 6 },
+      "targets": [{
+        "expr": "sum(rate(admin_actions_total[5m])) by (action)",
+        "legendFormat": "{{ action }}"
+      }]
+    }
+  ]
+}

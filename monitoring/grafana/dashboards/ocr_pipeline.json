@@ -1,0 +1,80 @@
+{
+  "title": "Medibox — OCR Pipeline",
+  "uid": "medibox-ocr",
+  "tags": ["medibox", "ocr"],
+  "timezone": "browser",
+  "refresh": "15s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Jobs Queued (1h)",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "sum(increase(ocr_jobs_total{status='queued'}[1h]))", "legendFormat": "queued" }]
+    },
+    {
+      "id": 2, "type": "stat", "title": "Jobs Completed (1h)",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "sum(increase(ocr_jobs_total{status='completed'}[1h]))", "legendFormat": "completed" }],
+      "options": { "colorMode": "background", "thresholds": { "steps": [{ "color": "green", "value": null }] } }
+    },
+    {
+      "id": 3, "type": "stat", "title": "Jobs Failed (1h)",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "sum(increase(ocr_jobs_total{status='failed'}[1h]))", "legendFormat": "failed" }],
+      "options": {
+        "colorMode": "background",
+        "thresholds": { "steps": [
+          { "color": "green", "value": null },
+          { "color": "yellow", "value": 1 },
+          { "color": "red", "value": 5 }
+        ]}
+      }
+    },
+    {
+      "id": 4, "type": "stat", "title": "Queue Depth",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "celery_queue_depth{queue='inference'}", "legendFormat": "depth" }],
+      "options": {
+        "colorMode": "background",
+        "thresholds": { "steps": [
+          { "color": "green", "value": null },
+          { "color": "yellow", "value": 5 },
+          { "color": "red", "value": 20 }
+        ]}
+      }
+    },
+    {
+      "id": 5, "type": "stat", "title": "p95 Processing Time",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))",
+        "legendFormat": "p95"
+      }]
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Job Throughput",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "sum(rate(ocr_jobs_total{status='queued'}[5m]))", "legendFormat": "queued/s" },
+        { "expr": "sum(rate(ocr_jobs_total{status='completed'}[5m]))", "legendFormat": "completed/s" },
+        { "expr": "sum(rate(ocr_jobs_total{status='failed'}[5m]))", "legendFormat": "failed/s" }
+      ]
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Processing Time Distribution",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))", "legendFormat": "p95" },
+        { "expr": "histogram_quantile(0.99, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Human Corrections",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 6 },
+      "targets": [{ "expr": "sum(rate(corrections_total[10m]))", "legendFormat": "corrections/s" }]
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 """
-Settings loaded from environment variables (Railway injects them as env vars).
+Settings loaded from environment variables (Railway injects them).
 Never hard-code secrets. Local dev uses .env file.
 """
 
@@ -19,16 +19,15 @@ class Settings(BaseSettings):
     db_host: str = "127.0.0.1"
     db_port: int = 5432
     db_name: str = "neondb"
-    # Full connection URL — if set, takes priority over individual fields
-    database_url_override: str = ""
+    database_url_override: str = ""  # full Neon URL takes priority
 
     @property
     def database_url(self) -> str:
         if self.database_url_override:
-            # asyncpg requires postgresql+asyncpg:// scheme
             url = self.database_url_override
             if url.startswith("postgresql://"):
                 url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            url = url.replace("&channel_binding=require", "").replace("?channel_binding=require&", "?")
             return url
         return (
             f"postgresql+asyncpg://{self.db_user}:{self.db_password}"
@@ -56,9 +55,9 @@ class Settings(BaseSettings):
 
     # Firebase
     firebase_project_id: str = ""
-    firebase_credentials_path: str = ""  # path to JSON key (local dev only)
+    firebase_credentials_path: str = ""
 
-    # vLLM inference (RunPod or any OpenAI-compatible endpoint)
+    # vLLM (RunPod)
     vllm_url: str = "http://localhost:8000"
     vllm_api_key: str = ""
     vllm_model: str = "qwen2.5-vl-7b-instruct"
@@ -69,8 +68,9 @@ class Settings(BaseSettings):
     r2_secret_key: str = ""
     r2_bucket: str = "medibox-crops"
 
-    # PII encryption (Fernet key — generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
-    pii_encryption_key: str = ""
+    # PII encryption — Fernet (v1: current, prev: rotation window)
+    pii_encryption_key: str = ""       # active key
+    pii_encryption_key_prev: str = ""  # previous key (rotation window)
 
     # App
     environment: str = "production"
@@ -85,12 +85,17 @@ class Settings(BaseSettings):
     camera_secret: str = "medibox-camera-dev-secret"
 
     # Rate limiting
-    rate_limit_per_device: int = 60
-    rate_limit_burst: int = 10
+    rate_limit_per_device: int = 30
+    rate_limit_per_user: int = 60
+    rate_limit_per_ip: int = 200
+    rate_limit_burst: int = 50       # max requests per 5-second burst window
 
     # Connection pool
     db_pool_size: int = 5
     db_max_overflow: int = 2
+
+    # Metrics
+    metrics_secret: str = ""          # Bearer token required to scrape /metrics
 
 
 @lru_cache

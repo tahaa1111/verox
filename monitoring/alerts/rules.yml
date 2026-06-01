@@ -1,0 +1,133 @@
+groups:
+  # ---------------------------------------------------------------------------
+  # System / Infrastructure Alerts
+  # ---------------------------------------------------------------------------
+  - name: system
+    rules:
+      - alert: APIHighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API error rate above 5%"
+          description: "{{ $value | humanizePercentage }} of requests are returning 5xx errors"
+
+      - alert: APIHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le, endpoint)
+          ) > 1.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 latency above 1.5s"
+          description: "Endpoint {{ $labels.endpoint }} p95 latency is {{ $value | humanizeDuration }}"
+
+      - alert: ServiceDown
+        expr: up{job=~"medibox.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Medibox service is down"
+          description: "Job {{ $labels.job }} has been down for more than 1 minute"
+
+  # ---------------------------------------------------------------------------
+  # Security Alerts
+  # ---------------------------------------------------------------------------
+  - name: security
+    rules:
+      - alert: AuthFailureSpike
+        expr: |
+          sum(rate(auth_failures_total[5m])) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated authentication failure rate"
+          description: "Auth failures at {{ $value | humanize }}/s — possible brute force"
+
+      - alert: BruteForceDetected
+        expr: |
+          sum(rate(suspicious_requests_total{type="brute_force"}[5m])) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Brute force attack detected"
+          description: "IP soft-blocked due to {{ $value | humanize }} brute force events/s"
+
+      - alert: RateLimitSpike
+        expr: |
+          sum(rate(rate_limit_hits_total[5m])) by (layer) > 2
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rate limit spike on layer {{ $labels.layer }}"
+          description: "{{ $value | humanize }} rate limit events/s on {{ $labels.layer }} layer"
+
+      - alert: BlockedIPAttempts
+        expr: |
+          sum(rate(suspicious_requests_total{type="blocked_ip_attempt"}[5m])) > 0.5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Blocked IP continues attempting access"
+          description: "{{ $value | humanize }} attempts/s from blocked IPs"
+
+  # ---------------------------------------------------------------------------
+  # OCR Pipeline Alerts
+  # ---------------------------------------------------------------------------
+  - name: ocr_pipeline
+    rules:
+      - alert: HighOCRFailureRate
+        expr: |
+          sum(rate(ocr_jobs_total{status="failed"}[10m]))
+          /
+          sum(rate(ocr_jobs_total[10m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "OCR failure rate above 10%"
+          description: "{{ $value | humanizePercentage }} of OCR jobs are failing"
+
+      - alert: QueueBacklogLarge
+        expr: celery_queue_depth{queue="inference"} > 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Large inference queue backlog"
+          description: "Queue depth is {{ $value }} — worker may be down"
+
+      - alert: OCRSlowProcessing
+        expr: |
+          histogram_quantile(0.95, sum(rate(ocr_processing_seconds_bucket[10m])) by (le)) > 120
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "OCR p95 processing time above 2 minutes"
+          description: "p95 processing time is {{ $value | humanizeDuration }}"
+
+  # ---------------------------------------------------------------------------
+  # IoT / Device Alerts
+  # ---------------------------------------------------------------------------
+  - name: iot
+    rules:
+      - alert: DeviceOffline
+        expr: active_devices_total == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No active Pi devices detected"
+          description: "No camera frames received in the last 30 seconds"

@@ -1,0 +1,36 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+  external_labels:
+    environment: production
+    project: medibox
+
+rule_files:
+  - "alerts/rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []  # configure your alertmanager endpoint here
+
+scrape_configs:
+  # FastAPI API service
+  - job_name: medibox_api
+    scheme: https
+    metrics_path: /metrics
+    authorization:
+      credentials: "${METRICS_SECRET}"
+    static_configs:
+      - targets:
+          - medibox-api-production.up.railway.app
+    tls_config:
+      insecure_skip_verify: false
+
+  # Local development (no TLS)
+  - job_name: medibox_api_local
+    metrics_path: /metrics
+    authorization:
+      credentials: "${METRICS_SECRET}"
+    static_configs:
+      - targets:
+          - localhost:8000
