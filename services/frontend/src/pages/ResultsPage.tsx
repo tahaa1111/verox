@@ -433,13 +433,25 @@ export function ResultsPage() {
       {job?.status === "failed" && (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-700">
           <p className="font-semibold">Processing failed</p>
-          <p className="mt-1 text-red-600">{job.error_message ?? "An unknown error occurred."}</p>
-          <button
-            onClick={() => navigate("/")}
-            className="mt-3 bg-brand-600 hover:bg-brand-700 text-white font-medium text-sm px-4 py-2 rounded-xl transition-colors"
-          >
-            New Scan
-          </button>
+          <p className="mt-1 text-red-600">
+            {job.error_message?.includes("RetryError") || job.error_message?.includes("ReadTimeout")
+              ? "GPU inference timed out — the model server was cold. Please try again."
+              : (job.error_message ?? "An unknown error occurred.")}
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => navigate("/upload")}
+              className="bg-brand-600 hover:bg-brand-700 text-white font-medium text-sm px-4 py-2 rounded-xl transition-colors"
+            >
+              Retry Upload
+            </button>
+            <button
+              onClick={() => navigate("/")}
+              className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium text-sm px-4 py-2 rounded-xl transition-colors"
+            >
+              New Camera Scan
+            </button>
+          </div>
         </div>
       )}
 
