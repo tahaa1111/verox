@@ -394,7 +394,7 @@ def _repair_and_parse(raw: str, log) -> dict:
     try:
         import json_repair
         repaired = json_repair.repair_json(raw)
-        return json.loads(repaired)
+        return json.loads(str(repaired))
     except Exception:
         pass
     # Fallback: find first {...} block

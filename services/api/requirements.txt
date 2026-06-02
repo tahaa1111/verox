@@ -5,8 +5,9 @@
 # =============================================================================
 
 # ── Web framework ─────────────────────────────────────────────────────────────
-# fastapi 0.115.6+ pulls starlette >=0.41.3 which fixes CVE-2024-47874 + CVE-2025-54121
-fastapi==0.115.6
+# fastapi 0.136.3 + starlette 0.52.1 fixes CVE-2025-62727, PYSEC-2026-161, CVE-2025-54121
+fastapi==0.136.3
+starlette==0.52.1
 uvicorn[standard]==0.32.1
 uvloop==0.21.0
 httptools==0.6.4
@@ -31,15 +32,15 @@ redis[hiredis]==5.2.0
 firebase-admin==6.6.0
 
 # ── Encryption ────────────────────────────────────────────────────────────────
-# cryptography >=44.0.0 fixes PYSEC-2026-35, CVE-2024-12797, CVE-2026-26007
-cryptography==44.0.2
+# cryptography 48.0.0 fixes PYSEC-2026-35, CVE-2026-26007 and all prior CVEs
+cryptography==48.0.0
 
 # ── Object storage (Cloudflare R2) ───────────────────────────────────────────
 boto3==1.36.0
 
 # ── OCR / NLP pipeline (merged from worker) ───────────────────────────────────
-# Pillow >=11.0.0 fixes PYSEC-2026-165, CVE-2026-25990, CVE-2026-40192, CVE-2026-42311, CVE-2026-42310
-Pillow==11.0.0
+# Pillow 12.2.0 fixes PYSEC-2026-165, CVE-2026-25990, CVE-2026-40192, CVE-2026-42311, CVE-2026-42310
+Pillow==12.2.0
 rapidfuzz==3.10.1
 json-repair==0.30.3
 python-dateutil==2.9.0

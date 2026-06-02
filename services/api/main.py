@@ -37,7 +37,7 @@ settings = get_settings()
 # ---------------------------------------------------------------------------
 structlog.configure(
     processors=[
-        scrub_pii_processor,                         # must be first
+        scrub_pii_processor,                         # type: ignore[list-item]  # must be first
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
@@ -116,7 +116,7 @@ async def lifespan(app: FastAPI):
             environment=settings.environment,
             traces_sample_rate=0.1,
             integrations=[FastApiIntegration(), SqlalchemyIntegration()],
-            before_send=_sentry_scrub_pii,
+            before_send=_sentry_scrub_pii,  # type: ignore[arg-type]
         )
 
     # 3. Optional OTel tracing
