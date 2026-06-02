@@ -13,7 +13,7 @@ Metric families:
 
 from __future__ import annotations
 
-from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry, REGISTRY
+from prometheus_client import Counter, Gauge, Histogram
 
 # ---------------------------------------------------------------------------
 # API Metrics

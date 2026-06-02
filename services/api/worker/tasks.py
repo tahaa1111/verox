@@ -40,7 +40,6 @@ _CANCEL_PREFIX = "cancel:"
 async def startup_ctx(ctx: dict) -> None:
     """Called once when the arq worker starts. Initialise shared resources."""
     import os
-    from arq.connections import create_pool, RedisSettings
     from services.api.core.database import AsyncSessionLocal
 
     ctx["db_session_factory"] = AsyncSessionLocal
@@ -162,7 +161,7 @@ async def run_pipeline(ctx: dict, job_id: str, payload: dict, prefix: str) -> di
                 await record_success(redis_url)
             except CircuitOpenError:
                 raise
-            except Exception as exc:
+            except Exception:
                 await record_failure(redis_url)
                 raise
 

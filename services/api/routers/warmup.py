@@ -14,8 +14,7 @@ Auth required: Firebase JWT.
 
 from __future__ import annotations
 
-import base64
-import os
+from datetime import datetime, timezone
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -83,7 +82,7 @@ async def warmup(
             }],
             "device_id": "web-warmup",
             "session_id": "00000000-0000-4000-8000-000000000000",
-            "timestamp": __import__("datetime").datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "_warmup": True,
         },
         "warmup/noop",

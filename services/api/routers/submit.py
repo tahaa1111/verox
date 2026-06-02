@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
+import redis.asyncio as aioredis
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.api.core.auth import verify_firebase_token, verify_device_claim
 from services.api.core.config import get_settings
 from services.api.core.database import get_db
-from services.api.core.security import check_rate_limits, check_ip_blocked
+from services.api.core.security import check_ip_blocked, check_rate_limits
 from services.api.models.audit import AuditLog
 from services.api.models.job import Job
 from services.api.schemas.payload import EdgePayload
@@ -21,6 +23,8 @@ from services.api.schemas.response import SubmitResponse
 logger = structlog.get_logger(__name__)
 router = APIRouter()
 settings = get_settings()
+
+_GPU_DAILY_LIMIT = int(os.getenv("GPU_DAILY_LIMIT_PER_USER", "50"))
 
 
 def _estimate_completion(crop_count: int) -> int:
@@ -34,9 +38,11 @@ async def submit(
     claims: dict = Depends(verify_firebase_token),
     db: AsyncSession = Depends(get_db),
 ) -> SubmitResponse:
-    import redis.asyncio as aioredis
     ip = request.client.host if request.client else "unknown"
     user_uid: str = claims.get("uid", claims.get("user_id", ""))
+
+    # Read idempotency key BEFORE opening Redis (so it's always in scope)
+    idempotency_key = request.headers.get("Idempotency-Key", "")
 
     r = aioredis.from_url(
         settings.redis_url, decode_responses=True,
@@ -54,8 +60,7 @@ async def submit(
                 detail={"status": "maintenance", "message": maintenance},
             )
 
-        # 3. Idempotency-Key deduplication (prevents double GPU billing on retry)
-        idempotency_key = request.headers.get("Idempotency-Key", "")
+        # 3. Idempotency — short-circuit duplicate submissions (no GPU rebill)
         if idempotency_key:
             cached = await r.get(f"idem:{idempotency_key}")
             if cached:
@@ -63,17 +68,14 @@ async def submit(
                 return SubmitResponse.model_validate_json(cached)
 
         # 4. Per-user daily GPU quota (protects credit spend)
-        import os
-        daily_limit = int(os.getenv("GPU_DAILY_LIMIT_PER_USER", "50"))
-        from datetime import date
         quota_key = f"gpu:quota:{user_uid}:{date.today().isoformat()}"
         daily_count = await r.incr(quota_key)
         if daily_count == 1:
-            await r.expire(quota_key, 86400)  # TTL = 1 day
-        if daily_count > daily_limit:
+            await r.expire(quota_key, 86400)
+        if daily_count > _GPU_DAILY_LIMIT:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Daily GPU quota exceeded ({daily_limit} jobs/day). Resets at midnight UTC.",
+                detail=f"Daily GPU quota exceeded ({_GPU_DAILY_LIMIT} jobs/day). Resets at midnight UTC.",
                 headers={"Retry-After": "86400"},
             )
 
@@ -86,7 +88,7 @@ async def submit(
     finally:
         await r.aclose()
 
-    # 5. Create Job + AuditLog
+    # 7. Create Job + AuditLog
     job_id = uuid.uuid4()
     now = datetime.now(timezone.utc)
 
@@ -113,22 +115,22 @@ async def submit(
             "device_id": payload.device_id,
             "crop_count": len(payload.crops),
             "request_id": request.headers.get("X-Request-ID", ""),
-            "idempotency_key": request.headers.get("Idempotency-Key", ""),
+            "idempotency_key": idempotency_key[:32] if idempotency_key else "",
         },
     ))
     await db.commit()
 
-    # 6. Enqueue via arq (replaces Celery send_task)
+    # 8. Enqueue via arq
     arq_pool = request.app.state.arq_pool
     await arq_pool.enqueue_job(
         "run_pipeline",
         str(job_id),
         payload.model_dump(mode="json"),
         job.gcs_prefix or "",
-        _job_id=str(job_id),  # arq deduplication key
+        _job_id=str(job_id),
     )
 
-    # 7. Prometheus counter
+    # 9. Prometheus counter
     try:
         from services.api.core.metrics import OCR_JOBS_TOTAL
         OCR_JOBS_TOTAL.labels(status="queued").inc()
@@ -145,20 +147,15 @@ async def submit(
         estimated_completion_seconds=_estimate_completion(len(payload.crops)),
     )
 
-    # Store idempotency response (TTL 24h — covers all reasonable retry windows)
+    # Cache response for idempotency (TTL 24h)
     if idempotency_key:
-        import redis.asyncio as aioredis
-        r2 = aioredis.from_url(settings.redis_url, decode_responses=True,
-                               socket_timeout=3)
         try:
-            await r2.set(
-                f"idem:{idempotency_key}",
-                response.model_dump_json(),
-                ex=86400,
+            r2 = aioredis.from_url(
+                settings.redis_url, decode_responses=True, socket_timeout=3,
             )
+            await r2.set(f"idem:{idempotency_key}", response.model_dump_json(), ex=86400)
+            await r2.aclose()
         except Exception:
             pass
-        finally:
-            await r2.aclose()
 
     return response
