@@ -1,4 +1,4 @@
-"""POST /v1/submit — validate, enqueue, return job_id in < 500ms."""
+"""POST /v1/submit — validate, enqueue via arq, return job_id in <500ms."""
 
 from __future__ import annotations
 
@@ -38,12 +38,15 @@ async def submit(
     ip = request.client.host if request.client else "unknown"
     user_uid: str = claims.get("uid", claims.get("user_id", ""))
 
-    r = aioredis.from_url(settings.redis_url, decode_responses=True)
+    r = aioredis.from_url(
+        settings.redis_url, decode_responses=True,
+        socket_timeout=5, socket_connect_timeout=3,
+    )
     try:
-        # 1. Check IP soft-block (abuse detection)
+        # 1. IP soft-block check (abuse detection)
         await check_ip_blocked(r, ip)
 
-        # 2. Check maintenance mode
+        # 2. Maintenance mode
         maintenance = await r.get(settings.maintenance_redis_key)
         if maintenance:
             raise HTTPException(
@@ -51,16 +54,16 @@ async def submit(
                 detail={"status": "maintenance", "message": maintenance},
             )
 
-        # 3. Verify device_id claim matches payload
+        # 3. Device claim validation
         verify_device_claim(claims, payload.device_id)
 
-        # 4. Multi-layer rate limiting (per-IP + per-user + per-device + burst)
+        # 4. Multi-layer rate limiting (IP + user + device + burst)
         await check_rate_limits(r, ip=ip, user_id=user_uid, device_id=payload.device_id)
 
     finally:
         await r.aclose()
 
-    # 5. Create job + audit log
+    # 5. Create Job + AuditLog
     job_id = uuid.uuid4()
     now = datetime.now(timezone.utc)
 
@@ -87,12 +90,20 @@ async def submit(
             "device_id": payload.device_id,
             "crop_count": len(payload.crops),
             "request_id": request.headers.get("X-Request-ID", ""),
+            "idempotency_key": request.headers.get("Idempotency-Key", ""),
         },
     ))
     await db.commit()
 
-    # 6. Enqueue Celery task
-    _enqueue(str(job_id), payload.model_dump(mode="json"), job.gcs_prefix or "")
+    # 6. Enqueue via arq (replaces Celery send_task)
+    arq_pool = request.app.state.arq_pool
+    await arq_pool.enqueue_job(
+        "run_pipeline",
+        str(job_id),
+        payload.model_dump(mode="json"),
+        job.gcs_prefix or "",
+        _job_id=str(job_id),  # arq deduplication key
+    )
 
     # 7. Prometheus counter
     try:
@@ -101,21 +112,12 @@ async def submit(
     except Exception:
         pass
 
-    logger.info("job_submitted", job_id=str(job_id), device_id=payload.device_id,
-                crop_count=len(payload.crops), user_uid=user_uid)
+    logger.info("job_submitted", job_id=str(job_id),
+               device_id=payload.device_id, crop_count=len(payload.crops))
 
     return SubmitResponse(
         job_id=str(job_id),
         status="queued",
         created_at=now,
         estimated_completion_seconds=_estimate_completion(len(payload.crops)),
-    )
-
-
-def _enqueue(job_id: str, payload: dict, gcs_prefix: str) -> None:
-    from services.worker.celery_app import app as celery_app
-    celery_app.send_task(
-        "services.worker.tasks.inference.run_pipeline",
-        args=[job_id, payload, gcs_prefix],
-        queue="inference",
     )

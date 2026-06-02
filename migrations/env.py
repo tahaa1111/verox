@@ -24,14 +24,23 @@ target_metadata = Base.metadata
 
 # Override sqlalchemy.url from env vars so secrets never touch alembic.ini
 def get_url() -> str:
+    import re
+    override = os.environ.get("DATABASE_URL_OVERRIDE", "")
+    if override:
+        if override.startswith("postgresql://"):
+            override = override.replace("postgresql://", "postgresql+asyncpg://", 1)
+        # asyncpg does not accept sslmode or channel_binding as query params — strip them
+        override = re.sub(r"[?&]sslmode=[^&]*", "", override)
+        override = re.sub(r"[?&]channel_binding=[^&]*", "", override)
+        # Clean up dangling ? or & after stripping
+        override = re.sub(r"\?&", "?", override)
+        override = re.sub(r"\?$", "", override)
+        return override
     user = os.environ["DB_USER"]
     password = os.environ["DB_PASSWORD"]
     host = os.environ.get("DB_HOST", "127.0.0.1")
     port = os.environ.get("DB_PORT", "5432")
-    name = os.environ.get("DB_NAME", "medibox")
-    if host.startswith("/"):
-        # Cloud SQL Auth Proxy Unix socket — must use ?host= query param
-        return f"postgresql+asyncpg://{user}:{password}@/{name}?host={host}"
+    name = os.environ.get("DB_NAME", "neondb")
     return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{name}"
 
 
@@ -59,8 +68,11 @@ async def run_async_migrations() -> None:
     config.set_main_option("sqlalchemy.url", get_url())
     cfg = config.get_section(config.config_ini_section, {})
     cfg["sqlalchemy.url"] = get_url()  # belt-and-suspenders override
+    # Neon requires SSL — pass ssl=True via connect_args since sslmode is stripped from URL
+    use_ssl = "neon.tech" in get_url()
     connectable = async_engine_from_config(
-        cfg, prefix="sqlalchemy.", poolclass=pool.NullPool
+        cfg, prefix="sqlalchemy.", poolclass=pool.NullPool,
+        connect_args={"ssl": True} if use_ssl else {},
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

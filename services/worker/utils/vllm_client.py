@@ -1,10 +1,13 @@
 """
-vLLM inference client — OpenAI-compatible endpoint (RunPod, local vLLM, or any host).
+vLLM inference client — async OpenAI-compatible endpoint (RunPod or local vLLM).
 
 Environment variables:
-  VLLM_URL      — full base URL of the vLLM server (e.g. https://api.runpod.ai/v2/{id}/openai)
-  VLLM_API_KEY  — bearer token (RunPod API key, or empty for unauthenticated local server)
-  VLLM_MODEL    — model name to pass in the request (default: qwen2.5-vl-7b-instruct)
+  VLLM_URL      — full base URL  (e.g. https://api.runpod.ai/v2/{id}/openai)
+  VLLM_API_KEY  — bearer token  (RunPod API key, or empty for unauthenticated)
+  VLLM_MODEL    — model name    (default: qwen2.5-vl-7b-instruct)
+
+Both sync (infer_grid) and async (infer_grid_async) variants are provided.
+The arq worker calls infer_grid_async; legacy Celery path called infer_grid.
 """
 
 from __future__ import annotations
@@ -24,9 +27,14 @@ _VLLM_URL     = os.getenv("VLLM_URL", "http://localhost:8000")
 _VLLM_API_KEY = os.getenv("VLLM_API_KEY", "")
 _VLLM_MODEL   = os.getenv("VLLM_MODEL", "qwen2.5-vl-7b-instruct")
 
+_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=5.0)
+
 
 def _load_system_prompt() -> str:
-    prompt_path = Path(__file__).parent.parent.parent / "vllm" / "prompts" / "system_prompt_v1.txt"
+    prompt_path = (
+        Path(__file__).parent.parent.parent
+        / "vllm" / "prompts" / "system_prompt_v1.txt"
+    )
     if prompt_path.exists():
         return prompt_path.read_text(encoding="utf-8")
     return "Extract prescription data from the image and return JSON."
@@ -41,12 +49,11 @@ def _build_bbox_hints(crop_slots: list | None) -> str:
         if not bbox or len(bbox) < 4:
             continue
         x1, y1, x2, y2 = bbox
-        cx = (x1 + x2) / 2
-        cy = (y1 + y2) / 2
-        h_pos = "left" if cx < 0.4 else ("right" if cx > 0.6 else "center")
-        v_pos = "top"  if cy < 0.4 else ("bottom" if cy > 0.6 else "middle")
+        cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+        h = "left" if cx < 0.4 else ("right" if cx > 0.6 else "center")
+        v = "top"  if cy < 0.4 else ("bottom" if cy > 0.6 else "middle")
         lines.append(
-            f"Cell {slot.cell_number}: {v_pos}-{h_pos} region "
+            f"Cell {slot.cell_number}: {v}-{h} "
             f"[x:{x1:.2f}–{x2:.2f}, y:{y1:.2f}–{y2:.2f}]"
         )
     if not lines:
@@ -54,39 +61,21 @@ def _build_bbox_hints(crop_slots: list | None) -> str:
     return "Spatial context (original frame positions):\n" + "\n".join(lines) + "\n\n"
 
 
-@retry(stop=stop_after_attempt(40), wait=wait_exponential(multiplier=1, min=4, max=60))
-def infer_grid(
-    grid_b64: str,
-    job_id: str,
-    cell_count: int,
-    model_version: str = "",
-    prompt_version: str = "v1",
-    crop_slots: list | None = None,
-) -> dict[str, Any]:
-    """
-    Send a composed grid image to the vLLM endpoint (RunPod or any OpenAI-compatible server).
-    Returns: {raw_output, cells, logprobs, inference_ms, prompt_version, model_version}
-    """
-    t0 = time.perf_counter()
-
+def _build_payload(grid_b64: str, cell_count: int, crop_slots: list | None) -> dict:
     system_prompt = _load_system_prompt()
     bbox_hints    = _build_bbox_hints(crop_slots)
-
     strip_note = (
         "These cells are HORIZONTAL STRIPS of the SAME prescription, ordered top→bottom.\n"
-        "Top cells = doctor header + date. Middle cells = patient + medications. "
-        "Bottom cells = remaining medications + CNAM + instructions.\n"
-        "If a cell contains a drug BOX (packaging) instead of prescription text, "
-        "mark it as cell_type=drug_box and do NOT extract medications from it.\n"
-        "Combine ALL prescription cells into one unified JSON result.\n"
+        "Top cells = doctor header + date. Middle = patient + medications. "
+        "Bottom = remaining medications + CNAM + instructions.\n"
+        "Drug BOX cells (packaging) → mark cell_type=drug_box, skip medications.\n"
+        "Combine ALL cells into one unified JSON result.\n"
     )
     user_text = (
-        f"{bbox_hints}"
-        f"{strip_note}"
+        f"{bbox_hints}{strip_note}"
         f"Extract the complete prescription from all {cell_count} cell(s). Return JSON."
     )
-
-    payload = {
+    return {
         "model": _VLLM_MODEL,
         "messages": [
             {"role": "system", "content": system_prompt},
@@ -103,26 +92,14 @@ def infer_grid(
         "response_format": {"type": "json_object"},
     }
 
-    headers: dict[str, str] = {}
-    if _VLLM_API_KEY:
-        headers["Authorization"] = f"Bearer {_VLLM_API_KEY}"
 
-    with httpx.Client(timeout=120.0) as client:
-        resp = client.post(
-            f"{_VLLM_URL.rstrip('/')}/v1/chat/completions",
-            json=payload,
-            headers=headers,
-        )
-        resp.raise_for_status()
-
-    data   = resp.json()
+def _parse_response(data: dict, t0: float, job_id: str, model_version: str,
+                    prompt_version: str, cell_count: int) -> dict:
     choice = data["choices"][0]
     logprobs = choice.get("logprobs", {})
-
     inference_ms = int((time.perf_counter() - t0) * 1000)
     logger.info("vllm_infer_done", job_id=job_id,
-                inference_ms=inference_ms, cell_count=cell_count)
-
+               inference_ms=inference_ms, cell_count=cell_count)
     return {
         "raw_output":     choice["message"]["content"],
         "cells":          [],
@@ -131,3 +108,83 @@ def infer_grid(
         "prompt_version": prompt_version,
         "model_version":  model_version or _VLLM_MODEL,
     }
+
+
+# ---------------------------------------------------------------------------
+# Async variant (used by arq worker)
+# ---------------------------------------------------------------------------
+
+async def infer_grid_async(
+    grid_b64: str,
+    job_id: str,
+    cell_count: int,
+    model_version: str = "",
+    prompt_version: str = "v1",
+    crop_slots: list | None = None,
+    _attempt: int = 1,
+) -> dict[str, Any]:
+    """Async inference with manual retry (tenacity doesn't support async well here)."""
+    max_attempts = 40
+    wait_min, wait_max = 4, 60
+
+    payload = _build_payload(grid_b64, cell_count, crop_slots)
+    headers: dict[str, str] = {}
+    if _VLLM_API_KEY:
+        headers["Authorization"] = f"Bearer {_VLLM_API_KEY}"
+
+    import asyncio
+    for attempt in range(1, max_attempts + 1):
+        t0 = time.perf_counter()
+        try:
+            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+                resp = await client.post(
+                    f"{_VLLM_URL.rstrip('/')}/v1/chat/completions",
+                    json=payload,
+                    headers=headers,
+                )
+                resp.raise_for_status()
+            return _parse_response(
+                resp.json(), t0, job_id, model_version, prompt_version, cell_count
+            )
+        except Exception as exc:
+            if attempt >= max_attempts:
+                logger.error("vllm_all_retries_exhausted", job_id=job_id,
+                            attempts=attempt, exc=str(exc))
+                raise
+            wait = min(wait_min * (2 ** (attempt - 1)), wait_max)
+            logger.warning("vllm_retry", job_id=job_id, attempt=attempt,
+                          wait=wait, exc=str(exc)[:100])
+            await asyncio.sleep(wait)
+
+    raise RuntimeError("infer_grid_async: unreachable")
+
+
+# ---------------------------------------------------------------------------
+# Sync variant (kept for backward compatibility)
+# ---------------------------------------------------------------------------
+
+@retry(stop=stop_after_attempt(40), wait=wait_exponential(multiplier=1, min=4, max=60))
+def infer_grid(
+    grid_b64: str,
+    job_id: str,
+    cell_count: int,
+    model_version: str = "",
+    prompt_version: str = "v1",
+    crop_slots: list | None = None,
+) -> dict[str, Any]:
+    t0 = time.perf_counter()
+    payload = _build_payload(grid_b64, cell_count, crop_slots)
+    headers: dict[str, str] = {}
+    if _VLLM_API_KEY:
+        headers["Authorization"] = f"Bearer {_VLLM_API_KEY}"
+
+    with httpx.Client(timeout=_TIMEOUT) as client:
+        resp = client.post(
+            f"{_VLLM_URL.rstrip('/')}/v1/chat/completions",
+            json=payload,
+            headers=headers,
+        )
+        resp.raise_for_status()
+    return _parse_response(
+        resp.json(), t0, job_id, model_version, prompt_version, cell_count
+    )

@@ -1,6 +1,9 @@
 """
 Cloudflare R2 crop storage client (S3-compatible via boto3).
-Drop-in replacement for the old GCS client — same public API.
+
+All R2 objects are PRIVATE. Content is served exclusively via presigned URLs
+(TTL 300s by default) generated per-request after authentication.
+No object is ever made public.
 
 Environment variables:
   R2_ENDPOINT       — https://<account>.eu.r2.cloudflarestorage.com
@@ -30,12 +33,20 @@ def _client():
         endpoint_url=_ENDPOINT,
         aws_access_key_id=_ACCESS_KEY,
         aws_secret_access_key=_SECRET_KEY,
-        config=Config(signature_version="s3v4", retries={"max_attempts": 2}),
+        config=Config(
+            signature_version="s3v4",
+            retries={"max_attempts": 2},
+        ),
     )
 
 
-def upload_crop(job_id: str, track_id: int, raw_bytes: bytes, content_type: str = "image/jpeg") -> str:
-    """Upload a crop image to R2. Returns the public R2 URI."""
+def upload_crop(
+    job_id: str,
+    track_id: int,
+    raw_bytes: bytes,
+    content_type: str = "image/jpeg",
+) -> str:
+    """Upload a crop image to R2. Returns the R2 object key (not a public URL)."""
     key = f"{job_id}/crop_{track_id:04d}.jpg"
     _client().put_object(
         Bucket=_BUCKET,
@@ -43,15 +54,32 @@ def upload_crop(job_id: str, track_id: int, raw_bytes: bytes, content_type: str 
         Body=raw_bytes,
         ContentType=content_type,
     )
-    return f"r2://{_BUCKET}/{key}"
+    return key  # return key, not URI — caller generates presigned URL on demand
 
 
-def upload_bytes(bucket_name: str, blob_name: str, data: bytes, content_type: str = "application/octet-stream") -> str:
-    """Generic upload. Returns R2 URI."""
+def generate_presigned_url(key: str, expires_in: int = 300) -> str:
+    """
+    Generate a presigned GET URL for a private R2 object.
+    Default TTL: 5 minutes. Never store this URL — generate fresh per request.
+    """
+    return _client().generate_presigned_url(
+        "get_object",
+        Params={"Bucket": _BUCKET, "Key": key},
+        ExpiresIn=expires_in,
+    )
+
+
+def upload_bytes(
+    bucket_name: str,
+    blob_name: str,
+    data: bytes,
+    content_type: str = "application/octet-stream",
+) -> str:
+    """Generic upload. Returns object key."""
     _client().put_object(
         Bucket=bucket_name,
         Key=blob_name,
         Body=data,
         ContentType=content_type,
     )
-    return f"r2://{bucket_name}/{blob_name}"
+    return blob_name

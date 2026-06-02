@@ -1,22 +1,59 @@
+# =============================================================================
+# Medibox API + Worker — merged requirements (single-process arq architecture)
+# Pinned to exact versions for reproducible builds.
+# Run: pip install -r requirements.txt
+# =============================================================================
+
+# ── Web framework ─────────────────────────────────────────────────────────────
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 uvloop==0.19.0
 httptools==0.6.1
+anyio==4.4.0
+
+# ── Validation & settings ─────────────────────────────────────────────────────
 pydantic==2.8.2
 pydantic-settings==2.4.0
+
+# ── Database (Neon Postgres — async) ─────────────────────────────────────────
 sqlalchemy[asyncio]==2.0.35
 asyncpg==0.29.0
-psycopg2-binary==2.9.9
 alembic==1.13.2
+
+# ── Task queue (replaces Celery) ──────────────────────────────────────────────
+arq==0.25.0
+
+# ── Redis (Upstash) ───────────────────────────────────────────────────────────
 redis[hiredis]==5.0.8
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
 firebase-admin==6.5.0
-structlog==24.4.0
+
+# ── Encryption ────────────────────────────────────────────────────────────────
 cryptography==43.0.1
+
+# ── Object storage (Cloudflare R2) ───────────────────────────────────────────
+boto3==1.35.0
+
+# ── OCR / NLP pipeline (merged from worker) ───────────────────────────────────
+Pillow==10.4.0
+rapidfuzz==3.9.7
+json-repair==0.28.1
+python-dateutil==2.9.0
+tenacity==9.0.0
+httpx==0.27.2
+spacy==3.7.4
+symspellpy==6.7.7
+
+# ── Observability ─────────────────────────────────────────────────────────────
+structlog==24.4.0
+prometheus-client==0.21.0
 opentelemetry-sdk==1.27.0
 opentelemetry-api==1.27.0
 opentelemetry-instrumentation-fastapi==0.48b0
 opentelemetry-instrumentation-sqlalchemy==0.48b0
 opentelemetry-instrumentation-redis==0.48b0
-celery[redis]==5.4.0
-boto3==1.35.0
-prometheus-client==0.21.0
+sentry-sdk[fastapi]==2.13.0
+
+# ── Image type validation ─────────────────────────────────────────────────────
+filetype==1.2.0

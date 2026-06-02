@@ -1,6 +1,12 @@
 """
-Firebase JWT verification + admin_role_grants second-factor check.
-Abuse detection: auth failures tracked per-IP in Redis.
+Firebase JWT verification + two-factor admin check.
+
+Security controls:
+  - verify_id_token with check_revoked=True (revoked/logged-out tokens rejected)
+  - Explicit aud + iss claim assertion after firebase-admin verification
+  - Auth failure classification (missing/invalid/expired/revoked/device_mismatch)
+  - Per-IP failure tracking → abuse detection → soft-block
+  - All failures emitted as AUTH_FAILURES Prometheus counter
 """
 
 from __future__ import annotations
@@ -13,13 +19,15 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from services.api.core.config import get_settings
-from services.api.core.metrics import AUTH_FAILURES
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
 
 _bearer = HTTPBearer(auto_error=False)
 _firebase_app = None
+
+# Firebase token issuer format
+_FIREBASE_ISS_PREFIX = "https://securetoken.google.com/"
 
 
 def _get_firebase_app():
@@ -37,8 +45,7 @@ def _get_firebase_app():
             cred = credentials.Certificate(cred_path)
         elif firebase_admin_json_str:
             try:
-                json_data = _json.loads(firebase_admin_json_str)
-                cred = credentials.Certificate(json_data)
+                cred = credentials.Certificate(_json.loads(firebase_admin_json_str))
             except Exception as exc:
                 logger.warning("firebase_admin_json_parse_error", error=str(exc))
                 cred = credentials.ApplicationDefault()
@@ -62,30 +69,53 @@ def _get_firebase_app():
 
 async def verify_firebase_token(
     request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> dict[str, Any]:
     ip = request.client.host if request.client else "unknown"
 
-    if credentials is None:
-        AUTH_FAILURES.labels(reason="missing_token").inc()
-        # Track for abuse detection
-        await _track_auth_failure(ip, "missing_token")
+    if creds is None:
+        _emit_auth_failure("missing_token")
+        await _track_failure(ip, "missing_token")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing Bearer token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    token = credentials.credentials
+    token = creds.credentials
     try:
         from firebase_admin import auth as fb_auth
         _get_firebase_app()
         decoded = fb_auth.verify_id_token(token, check_revoked=True)
+
+        # Explicit aud + iss claim assertion
+        # firebase-admin validates these internally, but we assert explicitly
+        # so a misconfigured project or token from a different Firebase project
+        # is caught here with a clear error rather than silently passing.
+        project_id = settings.firebase_project_id
+        if project_id:
+            if decoded.get("aud") != project_id:
+                _emit_auth_failure("invalid_audience")
+                raise ValueError(
+                    f"Token audience '{decoded.get('aud')}' does not match "
+                    f"project '{project_id}'"
+                )
+            expected_iss = f"{_FIREBASE_ISS_PREFIX}{project_id}"
+            if decoded.get("iss") != expected_iss:
+                _emit_auth_failure("invalid_issuer")
+                raise ValueError(
+                    f"Token issuer '{decoded.get('iss')}' does not match "
+                    f"expected '{expected_iss}'"
+                )
+
         return decoded
+
+    except HTTPException:
+        raise
     except Exception as exc:
         reason = _classify_firebase_error(exc)
-        AUTH_FAILURES.labels(reason=reason).inc()
-        await _track_auth_failure(ip, reason)
+        _emit_auth_failure(reason)
+        await _track_failure(ip, reason)
         logger.warning("firebase_jwt_invalid", reason=reason, ip=ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -100,36 +130,53 @@ def _classify_firebase_error(exc: Exception) -> str:
         return "revoked"
     if "expired" in msg:
         return "expired"
+    if "audience" in msg:
+        return "invalid_audience"
+    if "issuer" in msg:
+        return "invalid_issuer"
     if "invalid" in msg:
         return "invalid_token"
     return "unknown"
 
 
-async def _track_auth_failure(ip: str, reason: str) -> None:
+def _emit_auth_failure(reason: str) -> None:
+    try:
+        from services.api.core.metrics import AUTH_FAILURES
+        AUTH_FAILURES.labels(reason=reason).inc()
+    except Exception:
+        pass
+
+
+async def _track_failure(ip: str, reason: str) -> None:
+    """Record failure in Redis for abuse detection. Never blocks auth response."""
     try:
         import redis.asyncio as aioredis
         from services.api.core.security import record_auth_failure
-        r = aioredis.from_url(settings.redis_url, decode_responses=True)
+        r = aioredis.from_url(
+            settings.redis_url, decode_responses=True,
+            socket_timeout=5, socket_connect_timeout=3,
+        )
         try:
             await record_auth_failure(r, ip, reason)
         finally:
             await r.aclose()
     except Exception:
-        pass  # tracking failure must never block auth response
+        pass
 
 
 def verify_device_claim(claims: dict[str, Any], device_id: str) -> None:
     """Ensure JWT device_id claim matches payload device_id."""
     jwt_device_id = claims.get("device_id")
     if jwt_device_id is None:
-        if not device_id.startswith("web-") and not device_id.startswith("upload-"):
+        allowed_prefixes = ("web-", "upload-")
+        if not any(device_id.startswith(p) for p in allowed_prefixes):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Browser sessions must use a 'web-' or 'upload-' prefixed device_id",
             )
         return
     if jwt_device_id != device_id:
-        AUTH_FAILURES.labels(reason="device_mismatch").inc()
+        _emit_auth_failure("device_mismatch")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="device_id claim does not match payload",
@@ -146,8 +193,11 @@ async def require_admin(
     2. A non-revoked row in admin_role_grants table
     """
     if not claims.get("admin"):
-        AUTH_FAILURES.labels(reason="insufficient_role").inc()
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        _emit_auth_failure("insufficient_role")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
 
     uid = claims.get("uid", claims.get("user_id", ""))
     from sqlalchemy import text
@@ -160,15 +210,13 @@ async def require_admin(
             ),
             {"uid": uid},
         )
-        row = result.fetchone()
-
-    if row is None:
-        AUTH_FAILURES.labels(reason="grant_missing").inc()
-        logger.warning("admin_grant_missing", uid=uid)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin grant not found — contact system administrator",
-        )
+        if result.fetchone() is None:
+            _emit_auth_failure("grant_missing")
+            logger.warning("admin_grant_missing", uid=uid)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin grant not found — contact system administrator",
+            )
 
     try:
         from services.api.core.metrics import ADMIN_ACTIONS
@@ -180,13 +228,16 @@ async def require_admin(
 
 
 async def get_current_user_ws(token: str) -> dict[str, Any]:
-    """Authenticate WebSocket connections via ?token= query param."""
+    """Authenticate WebSocket connections via short-lived opaque token."""
     try:
         from firebase_admin import auth as fb_auth
         _get_firebase_app()
         return fb_auth.verify_id_token(token, check_revoked=True)
     except Exception as exc:
         reason = _classify_firebase_error(exc)
-        AUTH_FAILURES.labels(reason=reason).inc()
+        _emit_auth_failure(reason)
         logger.warning("ws_jwt_invalid", reason=reason)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid WebSocket token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid WebSocket token",
+        )

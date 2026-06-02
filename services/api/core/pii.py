@@ -1,28 +1,31 @@
 """
-PII encryption — Fernet symmetric encryption with key versioning.
+PII encryption — MultiFernet with key versioning and rotation support.
 
 Key strategy:
-  PII_ENCRYPTION_KEY       — current (active) key for all NEW encryptions
-  PII_ENCRYPTION_KEY_PREV  — previous key (optional) for decrypting rotated data
+  PII_ENCRYPTION_KEY        — current (active) key; all NEW writes use this
+  PII_ENCRYPTION_KEY_PREV   — previous key retained for decryption during rotation
 
-Encrypted format: "v1:fernet::<base64-token>"
-Legacy formats:   "fernet::<token>" (pre-versioning), "dev::<token>", "kms::..." (GCP era)
+Encryption format: "v2:multi::<base64-fernet-token>"
+Legacy read support: "v1:fernet::", "fernet::", "dev::" (same key path)
+GCP-era: "kms::" — cannot decrypt without GCP KMS; returns [LEGACY_GCP_ENCRYPTED]
+
+MultiFernet behaviour:
+  encrypt() always uses the FIRST (newest) key.
+  decrypt() tries all keys in order — old ciphertexts remain readable after rotation.
 
 Key rotation procedure:
-  1. Set PII_ENCRYPTION_KEY_PREV = old PII_ENCRYPTION_KEY
-  2. Generate new key: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  1. Set PII_ENCRYPTION_KEY_PREV = current PII_ENCRYPTION_KEY
+  2. Generate new key:
+       python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
   3. Set PII_ENCRYPTION_KEY = new key
-  4. Deploy — new writes use new key, old ciphertext still decryptable via PREV key
-  5. Run re-encryption job (optional — all results are re-encrypted on next read via decrypt→encrypt)
+  4. Deploy — new writes use new key; old ciphertexts still decrypt via PREV key
+  5. (Optional) run re-encryption task to migrate all v1 ciphertexts to v2
 
-Safe startup guarantee:
-  If PII_ENCRYPTION_KEY is missing, encrypt_pii() raises RuntimeError logged as CRITICAL.
-  The system does NOT silently skip encryption — that would be a data exposure.
-  startup.py catches this at boot and exits before serving traffic.
+No deterministic leakage: Fernet uses AES-128-CBC + HMAC-SHA256 with a random
+IV per message. Identical plaintexts always produce distinct ciphertexts.
 
-No deterministic leakage:
-  Fernet uses AES-128-CBC + HMAC-SHA256 with a random IV per message.
-  Same plaintext always produces a different ciphertext — no pattern leakage.
+PII values are NEVER logged — encrypt_pii() and decrypt_pii() must never
+emit the plaintext in any log, trace, or exception message.
 """
 
 from __future__ import annotations
@@ -34,74 +37,80 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
-_CURRENT_VERSION = "v1"
-
 
 @lru_cache(maxsize=1)
-def _current_fernet():
-    from cryptography.fernet import Fernet
-    key = os.getenv("PII_ENCRYPTION_KEY", "").strip()
-    if not key:
+def _multi_fernet():
+    from cryptography.fernet import Fernet, MultiFernet
+
+    keys = []
+    current = os.getenv("PII_ENCRYPTION_KEY", "").strip()
+    if current:
+        try:
+            keys.append(Fernet(current.encode()))
+        except Exception as exc:
+            raise RuntimeError(
+                f"PII_ENCRYPTION_KEY is not a valid Fernet key: {exc}"
+            ) from exc
+
+    prev = os.getenv("PII_ENCRYPTION_KEY_PREV", "").strip()
+    if prev:
+        try:
+            keys.append(Fernet(prev.encode()))
+        except Exception:
+            logger.warning("pii_prev_key_invalid")
+
+    if not keys:
         raise RuntimeError(
             "PII_ENCRYPTION_KEY is not set. "
-            "Generate: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            "Generate: python -c \"from cryptography.fernet import Fernet; "
+            "print(Fernet.generate_key().decode())\""
         )
-    return Fernet(key.encode())
 
-
-@lru_cache(maxsize=1)
-def _prev_fernet():
-    from cryptography.fernet import Fernet
-    key = os.getenv("PII_ENCRYPTION_KEY_PREV", "").strip()
-    if not key:
-        return None
-    try:
-        return Fernet(key.encode())
-    except Exception:
-        logger.warning("pii_prev_key_invalid")
-        return None
+    return MultiFernet(keys)
 
 
 def encrypt_pii(value: str) -> str:
     """
-    Encrypt a PII string using the current active Fernet key.
-    Returns versioned ciphertext: 'v1:fernet::<token>'
+    Encrypt a PII string with MultiFernet (always uses the newest active key).
+    Returns versioned ciphertext: 'v2:multi::<base64-token>'
     Raises RuntimeError if no key is configured (startup.py prevents this at boot).
-    PII values are NEVER logged.
+    The plaintext value is NEVER logged.
     """
     if not value:
         return value
-    f = _current_fernet()
-    token = f.encrypt(value.encode()).decode()
-    return f"{_CURRENT_VERSION}:fernet::{token}"
+    token = _multi_fernet().encrypt(value.encode()).decode()
+    return f"v2:multi::{token}"
 
 
 def decrypt_pii(encrypted: str) -> str:
     """
-    Decrypt a PII value. Tries current key, then previous key (rotation window).
+    Decrypt a PII value. Tries all configured keys (current + prev).
     Returns '[ENCRYPTED]' on any failure — never raises, never logs the value.
 
     Handles all historical formats:
-      v1:fernet::<token>    — current versioned format
-      fernet::<token>       — pre-versioning Fernet (same key, different prefix)
-      dev::<token>          — old local-dev format (same Fernet key)
-      kms::<enc>::<dek>     — GCP KMS era (cannot decrypt without GCP — returns legacy marker)
+      v2:multi::<token>   — current MultiFernet format
+      v1:fernet::<token>  — previous single-key Fernet format
+      fernet::<token>     — pre-versioning Fernet
+      dev::<token>        — old local-dev Fernet
+      kms::<enc>::<dek>   — GCP KMS era (unrecoverable without GCP)
     """
     if not encrypted:
         return encrypted
 
     try:
+        mf = _multi_fernet()
+
+        if encrypted.startswith("v2:multi::"):
+            return mf.decrypt(encrypted[len("v2:multi::"):].encode()).decode()
+
         if encrypted.startswith("v1:fernet::"):
-            token = encrypted[len("v1:fernet::"):]
-            return _try_decrypt(token)
+            return mf.decrypt(encrypted[len("v1:fernet::"):].encode()).decode()
 
         if encrypted.startswith("fernet::"):
-            token = encrypted[len("fernet::"):]
-            return _try_decrypt(token)
+            return mf.decrypt(encrypted[len("fernet::"):].encode()).decode()
 
         if encrypted.startswith("dev::"):
-            token = encrypted[5:]
-            return _try_decrypt(token)
+            return mf.decrypt(encrypted[5:].encode()).decode()
 
         if encrypted.startswith("kms::"):
             return "[LEGACY_GCP_ENCRYPTED]"
@@ -109,19 +118,4 @@ def decrypt_pii(encrypted: str) -> str:
     except Exception:
         pass
 
-    return "[ENCRYPTED]"
-
-
-def _try_decrypt(token: str) -> str:
-    """Try current key, then previous key. Never logs token value."""
-    errors = []
-    for f, label in [(_current_fernet(), "current"), (_prev_fernet(), "prev")]:
-        if f is None:
-            continue
-        try:
-            return f.decrypt(token.encode()).decode()
-        except Exception as exc:
-            errors.append(f"{label}: {type(exc).__name__}")
-
-    logger.warning("pii_decrypt_failed", error_count=len(errors))
     return "[ENCRYPTED]"
