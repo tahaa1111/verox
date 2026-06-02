@@ -20,49 +20,72 @@ def _firebase_modules() -> dict:
     }
 
 
+def _mock_request(ip: str = "127.0.0.1") -> MagicMock:
+    req = MagicMock()
+    req.client = MagicMock()
+    req.client.host = ip
+    return req
+
+
 class TestVerifyFirebaseToken:
     @pytest.mark.asyncio
     async def test_valid_token_returns_claims(self):
-        mock_claims = {"uid": "user123", "email": "pharmacist@clinic.tn", "admin": False}
+        mock_claims = {
+            "uid": "user123",
+            "email": "pharmacist@clinic.tn",
+            "admin": False,
+            "aud": "verox-4dc3f",
+            "iss": "https://securetoken.google.com/verox-4dc3f",
+        }
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="fake_token")
+        request = _mock_request()
 
         mods = _firebase_modules()
         mods["firebase_admin"].auth.verify_id_token.return_value = mock_claims
         with patch.dict(sys.modules, mods), \
-             patch("services.api.core.auth._get_firebase_app", return_value=MagicMock()):
+             patch("services.api.core.auth._get_firebase_app", return_value=MagicMock()), \
+             patch("services.api.core.auth.settings") as mock_settings:
+            mock_settings.firebase_project_id = ""  # skip aud/iss assertion
+            mock_settings.redis_url = "redis://localhost:6379"
             from services.api.core.auth import verify_firebase_token
-            result = await verify_firebase_token(credentials=creds)
+            result = await verify_firebase_token(request=request, creds=creds)
             assert result["uid"] == "user123"
 
     @pytest.mark.asyncio
     async def test_missing_credentials_raises_401(self):
-        from services.api.core.auth import verify_firebase_token
-        with pytest.raises(HTTPException) as exc_info:
-            await verify_firebase_token(credentials=None)
-        assert exc_info.value.status_code == 401
+        request = _mock_request()
+        with patch("services.api.core.auth._track_failure", new=AsyncMock()):
+            from services.api.core.auth import verify_firebase_token
+            with pytest.raises(HTTPException) as exc_info:
+                await verify_firebase_token(request=request, creds=None)
+            assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
     async def test_expired_token_raises_401(self):
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="expired_token")
+        request = _mock_request()
         mods = _firebase_modules()
         mods["firebase_admin"].auth.verify_id_token.side_effect = Exception("Token expired")
         with patch.dict(sys.modules, mods), \
-             patch("services.api.core.auth._get_firebase_app", return_value=MagicMock()):
+             patch("services.api.core.auth._get_firebase_app", return_value=MagicMock()), \
+             patch("services.api.core.auth._track_failure", new=AsyncMock()):
             from services.api.core.auth import verify_firebase_token
             with pytest.raises(HTTPException) as exc_info:
-                await verify_firebase_token(credentials=creds)
+                await verify_firebase_token(request=request, creds=creds)
             assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
     async def test_invalid_token_raises_401(self):
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="invalid_token")
+        request = _mock_request()
         mods = _firebase_modules()
         mods["firebase_admin"].auth.verify_id_token.side_effect = ValueError("Invalid token")
         with patch.dict(sys.modules, mods), \
-             patch("services.api.core.auth._get_firebase_app", return_value=MagicMock()):
+             patch("services.api.core.auth._get_firebase_app", return_value=MagicMock()), \
+             patch("services.api.core.auth._track_failure", new=AsyncMock()):
             from services.api.core.auth import verify_firebase_token
             with pytest.raises(HTTPException) as exc_info:
-                await verify_firebase_token(credentials=creds)
+                await verify_firebase_token(request=request, creds=creds)
             assert exc_info.value.status_code == 401
 
 
@@ -92,10 +115,8 @@ class TestRequireAdmin:
     @pytest.mark.asyncio
     async def test_admin_claim_and_db_row_pass(self):
         mock_claims = {"uid": "admin1", "admin": True}
-        mock_request = MagicMock()
-        # row exists
+        mock_request = _mock_request()
         db_mod = _make_db_module(fetchone_return=MagicMock())
-        # require_admin also does `from sqlalchemy import text` locally
         mock_sqla = MagicMock()
         with patch.dict(sys.modules, {
             "services.api.core.database": db_mod,
@@ -108,7 +129,7 @@ class TestRequireAdmin:
     @pytest.mark.asyncio
     async def test_no_admin_claim_raises_403(self):
         mock_claims = {"uid": "user1", "admin": False}
-        mock_request = MagicMock()
+        mock_request = _mock_request()
 
         from services.api.core.auth import require_admin
         with pytest.raises(HTTPException) as exc_info:
@@ -117,10 +138,9 @@ class TestRequireAdmin:
 
     @pytest.mark.asyncio
     async def test_admin_claim_without_db_row_raises_403(self):
-        """DD-013: Both Firebase admin claim AND admin_role_grants row required."""
+        """Both Firebase admin claim AND admin_role_grants row required."""
         mock_claims = {"uid": "admin1", "admin": True}
-        mock_request = MagicMock()
-        # no DB row
+        mock_request = _mock_request()
         db_mod = _make_db_module(fetchone_return=None)
         mock_sqla = MagicMock()
         with patch.dict(sys.modules, {
