@@ -51,7 +51,7 @@ RATE_LIMIT_HITS = Counter(
 SUSPICIOUS_REQUESTS = Counter(
     "suspicious_requests_total",
     "Suspicious or abusive request patterns detected",
-    ["type"],     # type: brute_force | blocked_ip_attempt | token_replay
+    ["type"],     # values: brute_force | blocked_ip_attempt | token_replay
 )
 
 ADMIN_ACTIONS = Counter(

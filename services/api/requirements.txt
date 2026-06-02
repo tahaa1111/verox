@@ -1,59 +1,62 @@
 # =============================================================================
 # Medibox API + Worker — merged requirements (single-process arq architecture)
-# Pinned to exact versions for reproducible builds.
-# Run: pip install -r requirements.txt
+# Security policy: pip-audit runs on every push and fails on HIGH CVEs with fixes.
+# Upgrade procedure: bump version here → push → CI validates → deploy.
 # =============================================================================
 
 # ── Web framework ─────────────────────────────────────────────────────────────
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
-uvloop==0.19.0
-httptools==0.6.1
-anyio==4.4.0
+# fastapi 0.115.6+ pulls starlette >=0.41.3 which fixes CVE-2024-47874 + CVE-2025-54121
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+uvloop==0.21.0
+httptools==0.6.4
+anyio==4.6.2
 
 # ── Validation & settings ─────────────────────────────────────────────────────
-pydantic==2.8.2
-pydantic-settings==2.4.0
+pydantic==2.9.2
+pydantic-settings==2.6.1
 
 # ── Database (Neon Postgres — async) ─────────────────────────────────────────
-sqlalchemy[asyncio]==2.0.35
-asyncpg==0.29.0
-alembic==1.13.2
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
 
 # ── Task queue (replaces Celery) ──────────────────────────────────────────────
-arq==0.25.0
+arq==0.26.1
 
 # ── Redis (Upstash) ───────────────────────────────────────────────────────────
-redis[hiredis]==5.0.8
+redis[hiredis]==5.2.0
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
-firebase-admin==6.5.0
+firebase-admin==6.6.0
 
 # ── Encryption ────────────────────────────────────────────────────────────────
-cryptography==43.0.1
+# cryptography >=44.0.0 fixes PYSEC-2026-35, CVE-2024-12797, CVE-2026-26007
+cryptography==44.0.2
 
 # ── Object storage (Cloudflare R2) ───────────────────────────────────────────
-boto3==1.35.0
+boto3==1.36.0
 
 # ── OCR / NLP pipeline (merged from worker) ───────────────────────────────────
-Pillow==10.4.0
-rapidfuzz==3.9.7
-json-repair==0.28.1
+# Pillow >=11.0.0 fixes PYSEC-2026-165, CVE-2026-25990, CVE-2026-40192, CVE-2026-42311, CVE-2026-42310
+Pillow==11.0.0
+rapidfuzz==3.10.1
+json-repair==0.30.3
 python-dateutil==2.9.0
 tenacity==9.0.0
-httpx==0.27.2
-spacy==3.7.4
+httpx==0.28.1
+spacy==3.8.3
 symspellpy==6.7.7
 
 # ── Observability ─────────────────────────────────────────────────────────────
 structlog==24.4.0
-prometheus-client==0.21.0
-opentelemetry-sdk==1.27.0
-opentelemetry-api==1.27.0
-opentelemetry-instrumentation-fastapi==0.48b0
-opentelemetry-instrumentation-sqlalchemy==0.48b0
-opentelemetry-instrumentation-redis==0.48b0
-sentry-sdk[fastapi]==2.13.0
+prometheus-client==0.21.1
+opentelemetry-sdk==1.29.0
+opentelemetry-api==1.29.0
+opentelemetry-instrumentation-fastapi==0.50b0
+opentelemetry-instrumentation-sqlalchemy==0.50b0
+opentelemetry-instrumentation-redis==0.50b0
+sentry-sdk[fastapi]==2.19.2
 
 # ── Image type validation ─────────────────────────────────────────────────────
 filetype==1.2.0
