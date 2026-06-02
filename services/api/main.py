@@ -136,6 +136,34 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------------------------
+# Request body size limit — 10MB max (prevents OOM from malicious large uploads)
+# ---------------------------------------------------------------------------
+
+_MAX_BODY_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+@app.middleware("http")
+async def body_size_limit_middleware(request: Request, call_next) -> Response:
+    # Check Content-Length header — rejects oversized requests before reading body.
+    # Chunked transfers without Content-Length are limited by Railway's 100MB
+    # infrastructure cap. This covers all legitimate client scenarios.
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > _MAX_BODY_BYTES:
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": "Request body too large. Maximum allowed: 10MB"},
+                )
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Invalid Content-Length header"},
+            )
+    return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
 # Security headers middleware
 # ---------------------------------------------------------------------------
 

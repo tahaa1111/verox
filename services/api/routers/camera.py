@@ -93,6 +93,7 @@ def _enqueue(job_id: str, payload: dict, gcs_prefix: str) -> None:
 
 @router.post("/camera/push", status_code=204, response_class=Response, include_in_schema=False)
 async def camera_push(
+    request: Request,
     payload: CameraPushPayload,
     x_camera_secret: str = Header(alias="X-Camera-Secret", default=""),
 ) -> Response:
@@ -102,6 +103,17 @@ async def camera_push(
 
     r = aioredis.from_url(settings.redis_url, decode_responses=True)
     try:
+        # Per-device rate limit: 10 pushes/second max (Pi runs at ~2fps, 10 is generous)
+        rl_key = f"rl:campush:{payload.device_id}"
+        count = await r.incr(rl_key)
+        if count == 1:
+            await r.expire(rl_key, 1)  # 1-second window
+        if count > 10:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Camera push rate limit exceeded",
+                headers={"Retry-After": "1"},
+            )
         await r.set(_frame_key(payload.device_id), payload.frame, ex=_CAMERA_REDIS_TTL)
         await r.set(
             _stable_key(payload.device_id),
@@ -119,6 +131,7 @@ async def camera_push(
 
 @router.post("/camera/push-job", status_code=204, response_class=Response, include_in_schema=False)
 async def camera_push_job(
+    request: Request,
     payload: CameraJobPayload,
     x_camera_secret: str = Header(alias="X-Camera-Secret", default=""),
 ) -> Response:
