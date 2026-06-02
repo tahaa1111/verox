@@ -54,10 +54,33 @@ async def submit(
                 detail={"status": "maintenance", "message": maintenance},
             )
 
-        # 3. Device claim validation
+        # 3. Idempotency-Key deduplication (prevents double GPU billing on retry)
+        idempotency_key = request.headers.get("Idempotency-Key", "")
+        if idempotency_key:
+            cached = await r.get(f"idem:{idempotency_key}")
+            if cached:
+                logger.info("idempotency_hit", key=idempotency_key[:16])
+                return SubmitResponse.model_validate_json(cached)
+
+        # 4. Per-user daily GPU quota (protects credit spend)
+        import os
+        daily_limit = int(os.getenv("GPU_DAILY_LIMIT_PER_USER", "50"))
+        from datetime import date
+        quota_key = f"gpu:quota:{user_uid}:{date.today().isoformat()}"
+        daily_count = await r.incr(quota_key)
+        if daily_count == 1:
+            await r.expire(quota_key, 86400)  # TTL = 1 day
+        if daily_count > daily_limit:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Daily GPU quota exceeded ({daily_limit} jobs/day). Resets at midnight UTC.",
+                headers={"Retry-After": "86400"},
+            )
+
+        # 5. Device claim validation
         verify_device_claim(claims, payload.device_id)
 
-        # 4. Multi-layer rate limiting (IP + user + device + burst)
+        # 6. Multi-layer rate limiting (IP + user + device + burst)
         await check_rate_limits(r, ip=ip, user_id=user_uid, device_id=payload.device_id)
 
     finally:
@@ -115,9 +138,27 @@ async def submit(
     logger.info("job_submitted", job_id=str(job_id),
                device_id=payload.device_id, crop_count=len(payload.crops))
 
-    return SubmitResponse(
+    response = SubmitResponse(
         job_id=str(job_id),
         status="queued",
         created_at=now,
         estimated_completion_seconds=_estimate_completion(len(payload.crops)),
     )
+
+    # Store idempotency response (TTL 24h — covers all reasonable retry windows)
+    if idempotency_key:
+        import redis.asyncio as aioredis
+        r2 = aioredis.from_url(settings.redis_url, decode_responses=True,
+                               socket_timeout=3)
+        try:
+            await r2.set(
+                f"idem:{idempotency_key}",
+                response.model_dump_json(),
+                ex=86400,
+            )
+        except Exception:
+            pass
+        finally:
+            await r2.aclose()
+
+    return response

@@ -124,11 +124,16 @@ async def run_pipeline(ctx: dict, job_id: str, payload: dict, prefix: str) -> di
             for i, crop in enumerate(crops)
         }
 
-        # 4. RunPod inference (async httpx)
+        # 4. RunPod inference (async httpx + circuit breaker)
         await _update_job(ctx, job_id, "inferring")
         t1 = time.perf_counter()
         active_model = await _get_active_model_version(ctx)
         all_raw_outputs: list[dict] = []
+
+        # Skip inference on warmup jobs — just prove the pipeline runs
+        if payload.get("_warmup"):
+            log.info("warmup_job_short_circuit")
+            return {"job_id": job_id, "status": "warmup_complete"}
 
         for i, grid in enumerate(grids):
             if await _is_cancelled(redis_url, job_id):
@@ -139,14 +144,28 @@ async def run_pipeline(ctx: dict, job_id: str, payload: dict, prefix: str) -> di
                 })
                 return {"job_id": job_id, "status": "cancelled"}
 
-            from services.worker.utils.vllm_client import infer_grid_async
-            result = await infer_grid_async(
-                grid_b64=grid.grid_b64,
-                job_id=job_id,
-                cell_count=len(grid.slots),
-                model_version=active_model,
-                crop_slots=grid.slots,
+            # Circuit breaker check before every RunPod call
+            from services.worker.utils.circuit_breaker import (
+                check_circuit, record_success, record_failure, CircuitOpenError,
             )
+            await check_circuit(redis_url)
+
+            from services.worker.utils.vllm_client import infer_grid_async
+            try:
+                result = await infer_grid_async(
+                    grid_b64=grid.grid_b64,
+                    job_id=job_id,
+                    cell_count=len(grid.slots),
+                    model_version=active_model,
+                    crop_slots=grid.slots,
+                )
+                await record_success(redis_url)
+            except CircuitOpenError:
+                raise
+            except Exception as exc:
+                await record_failure(redis_url)
+                raise
+
             all_raw_outputs.append({"result": result, "slots": grid.slots})
             await _ws_publish(redis_url, job_id, {
                 "event": "inference_progress", "job_id": job_id, "stage": "ocr",

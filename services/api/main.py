@@ -27,7 +27,7 @@ from services.api.core.config import get_settings
 from services.api.core.logging_processors import scrub_pii_processor
 from services.api.core.startup import validate_secrets
 from services.api.core.telemetry import configure_telemetry
-from services.api.routers import admin, camera, corrections, results, submit
+from services.api.routers import admin, camera, corrections, results, submit, warmup
 from services.api.ws.manager import ws_manager
 
 settings = get_settings()
@@ -345,6 +345,7 @@ app.include_router(results.router,     prefix="/v1", tags=["Results"])
 app.include_router(admin.router,       prefix="/v1", tags=["Admin"])
 app.include_router(corrections.router, prefix="/v1", tags=["Corrections"])
 app.include_router(camera.router,      prefix="/v1", tags=["Camera"])
+app.include_router(warmup.router,      prefix="/v1", tags=["Warmup"])
 
 
 # ---------------------------------------------------------------------------
