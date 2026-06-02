@@ -50,6 +50,8 @@ class TimingsMs(BaseModel):
 
 
 class PrescriptionResult(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
     job_id: str
     session_id: str
     prescription_id: str | None = None
