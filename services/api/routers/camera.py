@@ -75,16 +75,12 @@ class CaptureResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Celery enqueue helper
+# arq enqueue helper
 # ---------------------------------------------------------------------------
 
-def _enqueue(job_id: str, payload: dict, gcs_prefix: str) -> None:
-    from services.worker.celery_app import app as celery_app
-    celery_app.send_task(
-        "services.worker.tasks.inference.run_pipeline",
-        args=[job_id, payload, gcs_prefix],
-        queue="inference",
-    )
+async def _enqueue(request: Request, job_id: str, payload: dict, gcs_prefix: str) -> None:
+    arq_pool = request.app.state.arq_pool
+    await arq_pool.enqueue_job("run_pipeline", job_id, payload, gcs_prefix, _job_id=job_id)
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +241,7 @@ async def camera_capture(
         "device_id": device_id,
         "session_id": str(job_id),
     }
-    _enqueue(str(job_id), payload, gcs_prefix)
+    await _enqueue(request, str(job_id), payload, gcs_prefix)
 
     logger.info("camera_capture_queued", job_id=str(job_id), device_id=device_id)
     return CaptureResponse(job_id=str(job_id), device_id=device_id)
