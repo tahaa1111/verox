@@ -92,7 +92,7 @@ export function CameraPage() {
     setFrameSrc(null);
     if (sendStop) signalCameraStop().catch(() => {});
   }, []);
-  useEffect(() => () => stopPolling(false), [stopPolling]);
+  useEffect(() => () => stopPolling(true), [stopPolling]);
 
   // ── On mount: poll any queued jobs to clear stale entries ─────────────────
   useEffect(() => {
