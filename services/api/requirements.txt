@@ -5,9 +5,9 @@
 # =============================================================================
 
 # ── Web framework ─────────────────────────────────────────────────────────────
-# fastapi 0.136.3 + starlette 0.52.1 fixes CVE-2025-62727, PYSEC-2026-161, CVE-2025-54121
+# fastapi 0.136.3 + starlette 1.2.1 fixes CVE-2025-62727, PYSEC-2026-161, CVE-2025-54121
 fastapi==0.136.3
-starlette==0.52.1
+starlette==1.2.1
 uvicorn[standard]==0.32.1
 uvloop==0.21.0
 httptools==0.6.4
