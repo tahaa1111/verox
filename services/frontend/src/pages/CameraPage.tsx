@@ -78,15 +78,18 @@ export function CameraPage() {
 
   const { jobQueue, addToQueue, removeFromQueue, upsertJob } = useStore();
 
-  const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startTimer = useRef<ReturnType<typeof setTimeout>  | null>(null);
-  const seenJobRef = useRef<string | null>(null);
-  const flashTimer = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startTimer   = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const seenJobRef   = useRef<string | null>(null);
+  const flashTimer   = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const lastFrameRef = useRef<number>(0);
+  const frameLostTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── stopPolling: hides the viewport and optionally stops the Pi ────────────
   const stopPolling = useCallback((sendStop = false) => {
-    if (pollRef.current)    { clearInterval(pollRef.current);  pollRef.current  = null; }
-    if (startTimer.current) { clearTimeout(startTimer.current); startTimer.current = null; }
+    if (pollRef.current)      { clearInterval(pollRef.current);  pollRef.current      = null; }
+    if (startTimer.current)   { clearTimeout(startTimer.current); startTimer.current  = null; }
+    if (frameLostTimer.current) { clearTimeout(frameLostTimer.current); frameLostTimer.current = null; }
     setCameraState("idle");
     setStableProgress(0);
     setFrameSrc(null);
@@ -150,6 +153,9 @@ export function CameraPage() {
 
         setFrameSrc("data:image/jpeg;base64," + snap.frame);
         setStableProgress(snap.stable_progress ?? 0);
+        lastFrameRef.current = Date.now();
+        if (frameLostTimer.current) { clearTimeout(frameLostTimer.current); frameLostTimer.current = null; }
+        frameLostTimer.current = setTimeout(() => stopPolling(true), 3000);
 
         // Pi auto-submitted a new job — add to queue, close viewport
         if (snap.latest_job_id && snap.latest_job_id !== seenJobRef.current) {
