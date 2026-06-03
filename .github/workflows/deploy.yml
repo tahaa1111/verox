@@ -117,20 +117,5 @@ jobs:
       - name: Unit tests
         run: pytest tests/unit/ -v --tb=short
 
-  # ---------------------------------------------------------------------------
-  # 4. Deploy — only after all checks pass
-  # ---------------------------------------------------------------------------
-  deploy-api:
-    name: Deploy API → Railway
-    needs: [security-scan, test]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service medibox-api --detach
+  # Deploy is handled automatically by Railway's GitHub integration.
+  # Railway watches the main branch and deploys on every push — no CLI needed.
