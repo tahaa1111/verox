@@ -51,12 +51,15 @@ symspellpy==6.7.7
 
 # ── Observability ─────────────────────────────────────────────────────────────
 structlog==24.4.0
-prometheus-client==0.21.1
+# prometheus-client removed: metrics now pushed via OTel OTLP, not scraped.
+# The Grafana Cloud backend is still Prometheus-compatible (PromQL works).
 opentelemetry-sdk==1.29.0
 opentelemetry-api==1.29.0
+opentelemetry-exporter-otlp-proto-http==1.29.0
 opentelemetry-instrumentation-fastapi==0.50b0
 opentelemetry-instrumentation-sqlalchemy==0.50b0
 opentelemetry-instrumentation-redis==0.50b0
+opentelemetry-instrumentation-httpx==0.50b0
 sentry-sdk[fastapi]==2.19.2
 
 # ── Image type validation ─────────────────────────────────────────────────────

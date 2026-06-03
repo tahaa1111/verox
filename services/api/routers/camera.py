@@ -1,22 +1,25 @@
 """
-Camera relay — Pi pushes frames, frontend polls snapshots and triggers capture.
+Camera relay — Pi pushes frames via WebSocket, frontend receives them in real-time.
 
-Routes:
-  POST /camera/push        — Pi → API: push base64 JPEG frame + stable_progress
-  POST /camera/push-job    — Pi → API: push job_id after auto-submit (stable trigger)
-  GET  /camera/snapshot    — Frontend → API: latest frame + stable_progress + latest_job_id
-  POST /camera/capture     — Frontend → API: capture current frame → submit job
-  POST /camera/start       — Frontend → API → Redis command (Pi picks up to start streaming)
-  POST /camera/stop        — Frontend → API → Redis command (Pi picks up to stop streaming)
-  GET  /camera/command     — Pi polls for start/stop commands (authenticated by camera secret)
+HTTP routes (kept for capture/snapshot fallback):
+  POST /camera/push-job    — Pi: push job_id after auto-submit
+  POST /camera/capture     — Frontend: manual capture → submit job
+  GET  /camera/snapshot    — Frontend: fallback HTTP snapshot (legacy)
+  POST /camera/start / stop — Legacy Redis command signaling (kept for fallback)
+  GET  /camera/command      — Legacy Pi command poll (kept for fallback)
+
+WebSocket routes (primary path):
+  WS /camera/ws/push/{device_id}  — Pi connects, streams frames + stable_progress
+  WS /camera/ws/feed/{device_id}  — Browser connects, receives frames live
 """
 from __future__ import annotations
 
 import hmac
+import json
 import uuid
 import redis.asyncio as aioredis
 import structlog
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +28,7 @@ from services.api.core.config import get_settings
 from services.api.core.database import get_db
 from services.api.models.audit import AuditLog
 from services.api.models.job import Job
+from services.api.ws.camera_relay import camera_relay
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -192,11 +196,14 @@ async def camera_capture(
     claims: dict = Depends(verify_firebase_token),
 ) -> CaptureResponse:
     """Capture the latest Pi frame, create a job, return job_id."""
-    r = aioredis.from_url(settings.redis_url, decode_responses=True)
-    try:
-        frame_b64 = await r.get(_frame_key(device_id))
-    finally:
-        await r.aclose()
+    # Primary: in-memory relay (WS path); fallback: Redis (legacy HTTP push path)
+    frame_b64 = camera_relay.get_latest_frame(device_id)
+    if not frame_b64:
+        r = aioredis.from_url(settings.redis_url, decode_responses=True)
+        try:
+            frame_b64 = await r.get(_frame_key(device_id))
+        finally:
+            await r.aclose()
 
     if not frame_b64:
         raise HTTPException(
@@ -303,3 +310,81 @@ async def camera_command(
     finally:
         await r.aclose()
     return {"command": cmd or "idle", "device_id": device_id}
+
+
+# ---------------------------------------------------------------------------
+# WebSocket — Pi pushes frames
+# ---------------------------------------------------------------------------
+
+@router.websocket("/camera/ws/push/{device_id}")
+async def camera_ws_push(
+    websocket: WebSocket,
+    device_id: str,
+    secret: str = "",
+) -> None:
+    """Pi connects here and streams frames. Auth via ?secret=<CAMERA_SECRET>."""
+    if not secret or not hmac.compare_digest(secret, settings.camera_secret):
+        await websocket.close(code=4403)
+        return
+
+    await camera_relay.connect_pi(device_id, websocket)
+    try:
+        while True:
+            try:
+                data = await websocket.receive_text()
+                msg = json.loads(data)
+                if msg.get("type") == "frame":
+                    await camera_relay.relay_frame(device_id, msg)
+                elif msg.get("type") == "job_id":
+                    # Pi auto-submitted — store job_id in Redis for fallback snapshot
+                    r = aioredis.from_url(settings.redis_url, decode_responses=True)
+                    try:
+                        await r.set(_job_key(device_id), msg.get("job_id", ""), ex=_JOB_REDIS_TTL)
+                    finally:
+                        await r.aclose()
+                    await camera_relay.relay_frame(device_id, msg)
+            except WebSocketDisconnect:
+                break
+    finally:
+        camera_relay.disconnect_pi(device_id)
+
+
+# ---------------------------------------------------------------------------
+# WebSocket — Browser receives frames
+# ---------------------------------------------------------------------------
+
+@router.websocket("/camera/ws/feed/{device_id}")
+async def camera_ws_feed(
+    websocket: WebSocket,
+    device_id: str,
+    token: str = "",
+) -> None:
+    """Browser connects here to receive live frames. Auth via ?token=<Firebase JWT>."""
+    from services.api.core.auth import _get_firebase_app
+    from firebase_admin import auth as fb_auth
+    try:
+        _get_firebase_app()
+        fb_auth.verify_id_token(token, check_revoked=True)
+    except Exception:
+        await websocket.close(code=4401)
+        return
+
+    await camera_relay.connect_viewer(device_id, websocket)
+    try:
+        while True:
+            try:
+                data = await websocket.receive_text()
+                msg = json.loads(data)
+                cmd = msg.get("type")
+                if cmd in ("start", "stop"):
+                    if not await camera_relay.send_command(device_id, cmd):
+                        # Pi not connected via WS — fall back to Redis command
+                        r = aioredis.from_url(settings.redis_url, decode_responses=True)
+                        try:
+                            await r.set(_cmd_key(device_id), cmd, ex=_CAMERA_CMD_TTL)
+                        finally:
+                            await r.aclose()
+            except WebSocketDisconnect:
+                break
+    finally:
+        camera_relay.disconnect_viewer(device_id, websocket)

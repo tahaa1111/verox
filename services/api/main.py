@@ -21,12 +21,12 @@ import structlog
 import structlog.stdlib
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse
 
 from services.api.core.config import get_settings
 from services.api.core.logging_processors import scrub_pii_processor
 from services.api.core.startup import validate_secrets
-from services.api.core.telemetry import configure_telemetry
+from services.api.core.telemetry import configure_telemetry, configure_metrics
 from services.api.routers import admin, camera, corrections, results, submit, warmup
 from services.api.ws.manager import ws_manager
 
@@ -67,6 +67,7 @@ async def _run_arq_worker() -> None:
         max_jobs=WorkerSettings.max_jobs,
         job_timeout=WorkerSettings.job_timeout,
         health_check_interval=WorkerSettings.health_check_interval,
+        poll_delay=WorkerSettings.poll_delay,
         keep_result=WorkerSettings.keep_result,
         on_startup=WorkerSettings.on_startup,
         on_shutdown=WorkerSettings.on_shutdown,
@@ -119,8 +120,11 @@ async def lifespan(app: FastAPI):
             before_send=_sentry_scrub_pii,  # type: ignore[arg-type]
         )
 
-    # 3. Optional OTel tracing
+    # 3. OTel traces + metrics pushed to Grafana Cloud via OTLP/HTTP.
+    #    No prometheus_client /metrics scrape endpoint — push beats scrape on a
+    #    service that may spin down (scraper either keeps it awake or misses data).
     configure_telemetry("medibox-api")
+    configure_metrics("medibox-api")
 
     # 4. WebSocket manager (Redis pub/sub)
     await ws_manager.startup()
@@ -319,22 +323,9 @@ def _normalize_endpoint(path: str) -> str:
     return re.sub(r"/\d+", "/{id}", path)
 
 
-# ---------------------------------------------------------------------------
-# /metrics — Prometheus scrape endpoint (protected)
-# ---------------------------------------------------------------------------
-@app.get("/metrics", include_in_schema=False)
-async def metrics_endpoint(request: Request):
-    secret = settings.metrics_secret
-    if not secret:
-        return JSONResponse(status_code=404, content={"detail": "Metrics not enabled"})
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer ") or auth[7:] != secret:
-        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
-    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-    return PlainTextResponse(
-        content=generate_latest().decode("utf-8"),
-        media_type=CONTENT_TYPE_LATEST,
-    )
+# /metrics scrape endpoint removed — metrics are now pushed via OTel OTLP to
+# Grafana Cloud. See telemetry.py configure_metrics() for push setup.
+# The Grafana Cloud backend is Prometheus-compatible; PromQL still works.
 
 
 # ---------------------------------------------------------------------------
@@ -356,13 +347,31 @@ async def healthz():
     return {"status": "ok"}
 
 
+
+# Cache readyz result: each probe hitting Redis/DB costs Upstash commands.
+# At 10s TTL and a 30s probe interval the saving is ~2 Redis GETs/probe saved.
+_readyz_cache: dict = {"body": None, "status": 0, "ts": 0.0}
+_READYZ_TTL = 10.0  # seconds
+
+
 @app.get("/v1/readyz", include_in_schema=False)
 async def readyz():
+    import time as _time
     import redis.asyncio as aioredis
     from sqlalchemy import text
     from services.api.core.database import engine
 
+    now = _time.monotonic()
+    cached = _readyz_cache
+    if cached["body"] is not None and (now - cached["ts"]) < _READYZ_TTL:
+        if cached["status"] == 200:
+            return cached["body"]
+        return JSONResponse(status_code=cached["status"], content=cached["body"])
+
     errors: list[str] = []
+    body: dict = {}
+    status_code = 200
+
     try:
         r = aioredis.from_url(
             settings.redis_url, socket_connect_timeout=2, decode_responses=True
@@ -370,26 +379,36 @@ async def readyz():
         maintenance = await r.get(settings.maintenance_redis_key)
         await r.aclose()
         if maintenance:
-            return JSONResponse(
-                status_code=503,
-                content={"status": "maintenance", "message": maintenance},
-            )
+            body = {"status": "maintenance", "message": maintenance}
+            status_code = 503
     except Exception as exc:
         errors.append(f"redis: {exc}")
 
-    try:
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
-    except Exception as exc:
-        errors.append(f"postgres: {exc}")
+    if status_code == 200:
+        try:
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+        except Exception as exc:
+            errors.append(f"postgres: {exc}")
 
-    if errors:
-        return JSONResponse(status_code=503, content={"status": "degraded", "errors": errors})
-    return {
-        "status": "ready",
-        "active_ws": ws_manager.active_count,
-        "disclaimer": "Pharmacist verification required.",
-    }
+        if errors:
+            body = {"status": "degraded", "errors": errors}
+            status_code = 503
+        else:
+            body = {
+                "status": "ready",
+                "active_ws": ws_manager.active_count,
+                "disclaimer": "Pharmacist verification required.",
+            }
+
+    # Only cache successful and degraded results (not transient network blips)
+    _readyz_cache["body"] = body
+    _readyz_cache["status"] = status_code
+    _readyz_cache["ts"] = now
+
+    if status_code != 200:
+        return JSONResponse(status_code=status_code, content=body)
+    return body
 
 
 # ---------------------------------------------------------------------------

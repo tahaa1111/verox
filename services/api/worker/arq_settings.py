@@ -24,16 +24,27 @@ def _redis_settings() -> RedisSettings:
     return RedisSettings.from_dsn(url)
 
 
+def _poll_delay() -> float:
+    raw = os.getenv("ARQ_POLL_DELAY", "2.0")
+    try:
+        return max(0.5, float(raw))  # floor at 0.5 — arq minimum
+    except ValueError:
+        return 2.0
+
+
 class WorkerSettings:
     functions = [run_pipeline]
     redis_settings = _redis_settings()
 
     # Single GPU job at a time — must not prefetch
     max_jobs = 1
-    job_timeout = 180          # seconds — hard kill
-    keep_result = 3600         # seconds — keep result in Redis
-    health_check_interval = 30 # seconds — save Upstash commands
-    retry_jobs = True          # re-enqueue on exception (tasks check ctx["job_try"])
+    job_timeout = 180           # seconds — hard kill
+    keep_result = 3600          # seconds — keep result in Redis
+    # Raised from 0.5s default: each ZRANGEBYSCORE = 1 Upstash command.
+    # 0.5s → 5.18M/month; 2.0s → 1.3M/month. Set ARQ_POLL_DELAY env var to tune.
+    poll_delay = _poll_delay()
+    health_check_interval = 30  # seconds — worker heartbeat in Redis
+    retry_jobs = True           # re-enqueue on exception (tasks check ctx["job_try"])
 
     on_startup = startup_ctx
     on_shutdown = shutdown_ctx

@@ -1,33 +1,38 @@
 /**
- * CameraPage — Live Pi camera feed with multi-scan queue support.
+ * CameraPage — Live Pi camera feed over WebSocket.
  *
  * Flow:
- *  1. Press "Start Camera" → viewport appears, signals Pi via POST /v1/camera/start
- *  2. Frontend polls GET /v1/camera/snapshot every 200 ms for live feed
- *  3. Pi detects document stability (3 s countdown ring) → auto-submits → pushes latest_job_id
- *  4. Frontend adds job to queue, viewport closes, "Queued ✓" toast appears
- *  5. "Capture Now" does the same (manual capture without waiting for stability)
- *  6. "Stop" closes the viewport without capturing
- *
- * Viewport lifecycle:  hidden → (Start Camera) → streaming → (Capture/Stop/Auto-submit) → hidden
- * Multi-scan: press "Start Camera" again after each capture — camera hardware is always warm.
+ *  1. Press "Start Camera" → opens WS to /v1/camera/ws/feed/{device_id}?token=...
+ *  2. WS send {"type":"start"} → Pi begins streaming frames back
+ *  3. Pi detects stability (3 s ring) → auto-submits → sends {"type":"job_id","job_id":"..."}
+ *  4. Frontend adds job to queue, closes WS, shows "Queued ✓" toast
+ *  5. "Capture Now" calls POST /camera/capture (reads latest in-memory frame on server)
+ *  6. "Stop" sends {"type":"stop"} and closes WS
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
-import {
-  getCameraSnapshot, submitCapture,
-  signalCameraStart, signalCameraStop,
-} from "../api";
+import { submitCapture, pollJob } from "../api";
 import { useStore } from "../store";
-import { pollJob } from "../api";
 
 type CameraState = "idle" | "streaming" | "error";
 
-const POLL_INTERVAL_MS   = 200;
 const START_TIMEOUT_MS   = 8000;
 const STABILITY_WINDOW_S = 3;
-const QUEUED_FLASH_MS    = 2500;  // how long to show the "Queued ✓" toast
+const QUEUED_FLASH_MS    = 2500;
+const DEVICE_ID          = "pi-0001";
+
+// Derive WebSocket base URL from the HTTP API base URL env var.
+function getWsFeedUrl(deviceId: string, token: string): string {
+  const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined;
+  if (apiBase && apiBase.startsWith("http")) {
+    const wsBase = apiBase.replace(/^http/, "ws");
+    return `${wsBase}/camera/ws/feed/${deviceId}?token=${encodeURIComponent(token)}`;
+  }
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const base  = apiBase ?? "/v1";
+  return `${proto}//${location.host}${base}/camera/ws/feed/${deviceId}?token=${encodeURIComponent(token)}`;
+}
 
 // ── Stability countdown ring ──────────────────────────────────────────────────
 
@@ -78,26 +83,32 @@ export function CameraPage() {
 
   const { jobQueue, addToQueue, removeFromQueue, upsertJob } = useStore();
 
-  const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startTimer   = useRef<ReturnType<typeof setTimeout>  | null>(null);
-  const seenJobRef   = useRef<string | null>(null);
-  const flashTimer   = useRef<ReturnType<typeof setTimeout>  | null>(null);
-  const lastFrameRef = useRef<number>(0);
+  const wsRef          = useRef<WebSocket | null>(null);
+  const seenJobRef     = useRef<string | null>(null);
+  const flashTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
   const frameLostTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── stopPolling: hides the viewport and optionally stops the Pi ────────────
-  const stopPolling = useCallback((sendStop = false) => {
-    if (pollRef.current)      { clearInterval(pollRef.current);  pollRef.current      = null; }
-    if (startTimer.current)   { clearTimeout(startTimer.current); startTimer.current  = null; }
+  // ── Close WS and reset viewport ───────────────────────────────────────────
+  const stopCamera = useCallback((sendStop = false) => {
+    if (startTimer.current)     { clearTimeout(startTimer.current);     startTimer.current     = null; }
     if (frameLostTimer.current) { clearTimeout(frameLostTimer.current); frameLostTimer.current = null; }
+    const ws = wsRef.current;
+    if (ws) {
+      wsRef.current = null;
+      if (sendStop && ws.readyState === WebSocket.OPEN) {
+        try { ws.send(JSON.stringify({ type: "stop" })); } catch { /* ignore */ }
+      }
+      ws.close();
+    }
     setCameraState("idle");
     setStableProgress(0);
     setFrameSrc(null);
-    if (sendStop) signalCameraStop().catch(() => {});
   }, []);
-  useEffect(() => () => stopPolling(true), [stopPolling]);
 
-  // ── On mount: poll any queued jobs to clear stale entries ─────────────────
+  useEffect(() => () => stopCamera(true), [stopCamera]);
+
+  // ── Poll any queued jobs on mount to clear stale entries ─────────────────
   useEffect(() => {
     jobQueue.forEach((id) => {
       pollJob(id)
@@ -106,79 +117,103 @@ export function CameraPage() {
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── "Queued ✓" toast ──────────────────────────────────────────────────────
+  // ── "Queued ✓" toast ─────────────────────────────────────────────────────
   const flashQueued = (jobId: string) => {
     setQueuedFlash(jobId);
     if (flashTimer.current) clearTimeout(flashTimer.current);
     flashTimer.current = setTimeout(() => setQueuedFlash(null), QUEUED_FLASH_MS);
   };
 
-  // ── Start camera ──────────────────────────────────────────────────────────
-  const startCamera = async () => {
+  // ── Start camera — open WebSocket ────────────────────────────────────────
+  const startCamera = () => {
     setCameraState("streaming");
     setError(null);
     setFrameSrc(null);
     setStableProgress(0);
     seenJobRef.current = null;
+
+    const token = localStorage.getItem("firebase_token") ?? "";
+    const url   = getWsFeedUrl(DEVICE_ID, token);
+    const ws    = new WebSocket(url);
+    wsRef.current = ws;
+
     let gotFrame = false;
-
-    // Pre-seed seenJobRef to avoid stale job_id from Redis (5-min TTL)
-    // triggering an unwanted queue addition on the very first poll.
-    try {
-      const init = await getCameraSnapshot();
-      seenJobRef.current = init.latest_job_id ?? null;
-    } catch { /* 404 = Pi hasn't pushed yet — fine */ }
-
-    try { await signalCameraStart(); } catch { /* non-fatal */ }
 
     startTimer.current = setTimeout(() => {
       if (!gotFrame) {
-        stopPolling();
+        stopCamera(false);
         setError(
-          "No camera feed received within 8 s.\n" +
-          "Ensure the Pi (medibox-camera service) is running:\n" +
+          "No camera feed within 8 s.\n" +
+          "Check the Pi (medibox-camera service) is running:\n" +
           "  sudo systemctl start medibox-camera"
         );
         setCameraState("error");
       }
     }, START_TIMEOUT_MS);
 
-    pollRef.current = setInterval(async () => {
-      try {
-        const snap = await getCameraSnapshot();
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: "start" }));
+    };
+
+    ws.onmessage = (event: MessageEvent) => {
+      let msg: Record<string, unknown>;
+      try { msg = JSON.parse(event.data as string); } catch { return; }
+
+      if (msg.type === "frame") {
         if (!gotFrame) {
           gotFrame = true;
           if (startTimer.current) { clearTimeout(startTimer.current); startTimer.current = null; }
         }
+        setFrameSrc("data:image/jpeg;base64," + (msg.frame as string));
+        setStableProgress((msg.stable_progress as number) ?? 0);
 
-        setFrameSrc("data:image/jpeg;base64," + snap.frame);
-        setStableProgress(snap.stable_progress ?? 0);
-        lastFrameRef.current = Date.now();
-        if (frameLostTimer.current) { clearTimeout(frameLostTimer.current); frameLostTimer.current = null; }
-        frameLostTimer.current = setTimeout(() => stopPolling(true), 3000);
+        if (frameLostTimer.current) clearTimeout(frameLostTimer.current);
+        frameLostTimer.current = setTimeout(() => stopCamera(true), 3000);
 
-        // Pi auto-submitted a new job — add to queue, close viewport
-        if (snap.latest_job_id && snap.latest_job_id !== seenJobRef.current) {
-          seenJobRef.current = snap.latest_job_id;
-          addToQueue(snap.latest_job_id);
-          flashQueued(snap.latest_job_id);
-          stopPolling(false); // close viewport; Pi manages its own push state
+      } else if (msg.type === "job_id") {
+        const jobId = msg.job_id as string;
+        if (jobId && jobId !== seenJobRef.current) {
+          seenJobRef.current = jobId;
+          addToQueue(jobId);
+          flashQueued(jobId);
+          stopCamera(false);
         }
-      } catch { /* 404 = no frame yet */ }
-    }, POLL_INTERVAL_MS);
+      }
+    };
+
+    ws.onerror = () => {
+      if (startTimer.current)     { clearTimeout(startTimer.current);     startTimer.current     = null; }
+      if (frameLostTimer.current) { clearTimeout(frameLostTimer.current); frameLostTimer.current = null; }
+      wsRef.current = null;
+      setError("WebSocket error — check network connection and Pi status.");
+      setCameraState("error");
+    };
+
+    ws.onclose = (e: CloseEvent) => {
+      if (startTimer.current)     { clearTimeout(startTimer.current);     startTimer.current     = null; }
+      if (frameLostTimer.current) { clearTimeout(frameLostTimer.current); frameLostTimer.current = null; }
+      wsRef.current = null;
+      if (e.code === 4401) {
+        setError("Authentication failed — sign out and back in, then retry.");
+        setCameraState("error");
+      } else if (e.code === 4403) {
+        setError("Camera access denied — invalid camera secret.");
+        setCameraState("error");
+      }
+      // Normal close (1000 / 1001) or stopCamera() already set idle — do nothing extra.
+    };
   };
 
-  // ── Manual capture ─────────────────────────────────────────────────────────
+  // ── Manual capture — server reads latest in-memory frame ─────────────────
   const captureNow = async () => {
     if (cameraState !== "streaming" || capturing) return;
     setCapturing(true);
     try {
-      const result = await submitCapture();
+      const result = await submitCapture(DEVICE_ID);
       seenJobRef.current = result.job_id;
-      signalCameraStop().catch(() => {});
       addToQueue(result.job_id);
       flashQueued(result.job_id);
-      stopPolling(false); // close viewport after capture
+      stopCamera(false);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
       setCameraState("error");
@@ -200,13 +235,12 @@ export function CameraPage() {
         </p>
       </div>
 
-      {/* ── Camera viewport — only rendered while streaming ────────────────── */}
+      {/* ── Camera viewport ─────────────────────────────────────────────────── */}
       {cameraState === "streaming" && (
         <div
           className="relative bg-black rounded-2xl overflow-hidden border border-gray-200 shadow-sm"
           style={{ aspectRatio: "4/3", maxHeight: "520px" }}
         >
-          {/* Live frame or waiting spinner */}
           {frameSrc ? (
             <img src={frameSrc} alt="Pi camera live feed" className="w-full h-full object-contain" />
           ) : (
@@ -219,7 +253,6 @@ export function CameraPage() {
             </div>
           )}
 
-          {/* LIVE badge */}
           {isLive && (
             <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-black/60 rounded-full px-2.5 py-1">
               <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
@@ -227,10 +260,8 @@ export function CameraPage() {
             </div>
           )}
 
-          {/* 3-second stability countdown ring */}
           {isLive && <StabilityRing progress={stableProgress} />}
 
-          {/* Manual capture submitting overlay */}
           {capturing && (
             <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3">
               <div className="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent" />
@@ -240,7 +271,7 @@ export function CameraPage() {
         </div>
       )}
 
-      {/* ── Error card (shown when viewport is closed after a timeout) ─────── */}
+      {/* ── Error card ───────────────────────────────────────────────────────── */}
       {cameraState === "error" && error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex gap-3 items-start">
           <svg className="w-5 h-5 text-red-500 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -251,7 +282,7 @@ export function CameraPage() {
         </div>
       )}
 
-      {/* ── "Queued ✓" toast — shown AFTER viewport closes ─────────────────── */}
+      {/* ── "Queued ✓" toast ─────────────────────────────────────────────────── */}
       {queuedFlash && (
         <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
           <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center shrink-0">
@@ -274,9 +305,8 @@ export function CameraPage() {
         </div>
       )}
 
-      {/* ── Controls ────────────────────────────────────────────────────────── */}
+      {/* ── Controls ─────────────────────────────────────────────────────────── */}
       <div className="flex gap-3 flex-wrap items-center">
-        {/* Start button — shown when idle or after error */}
         {(cameraState === "idle" || cameraState === "error") && (
           <button
             onClick={startCamera}
@@ -290,7 +320,6 @@ export function CameraPage() {
           </button>
         )}
 
-        {/* Capture + Stop — shown while streaming */}
         {cameraState === "streaming" && (
           <>
             <button
@@ -306,7 +335,7 @@ export function CameraPage() {
               Capture Now
             </button>
             <button
-              onClick={() => stopPolling(true)}
+              onClick={() => stopCamera(true)}
               className="border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium px-4 py-2.5 rounded-xl text-sm transition-colors"
             >
               Stop
@@ -314,7 +343,6 @@ export function CameraPage() {
           </>
         )}
 
-        {/* Queue summary pill */}
         {jobQueue.length > 0 && (
           <Link
             to="/queue"
@@ -334,7 +362,7 @@ export function CameraPage() {
       <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-800 space-y-1">
         <p className="font-semibold">📋 How it works</p>
         <ol className="list-decimal list-inside space-y-0.5 text-blue-700">
-          <li>Press <strong>Start Camera</strong> — live feed appears</li>
+          <li>Press <strong>Start Camera</strong> — live feed appears instantly over WebSocket</li>
           <li>Hold prescription still — 3 s countdown ring fills</li>
           <li>Camera submits automatically, feed closes, scan is queued</li>
           <li>Or press <strong>Capture Now</strong> to skip the countdown</li>

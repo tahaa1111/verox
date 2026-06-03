@@ -31,8 +31,10 @@ _WARNING = [
     ("VLLM_URL",             "RunPod endpoint URL — inference will fail"),
     ("R2_ACCESS_KEY_ID",     "Cloudflare R2 access key — crop uploads skipped"),
     ("R2_SECRET_KEY",        "Cloudflare R2 secret key — crop uploads skipped"),
-    ("METRICS_SECRET",       "Prometheus /metrics token — endpoint disabled"),
+    # METRICS_SECRET removed — /metrics scrape endpoint replaced by OTel OTLP push.
     ("SENTRY_DSN",           "Sentry DSN — error tracking disabled"),
+    ("GRAFANA_CLOUD_OTLP_ENDPOINT", "Grafana Cloud OTLP endpoint — metrics/traces push disabled"),
+    ("GRAFANA_CLOUD_TOKEN",         "Grafana Cloud token — metrics/traces push disabled"),
 ]
 
 

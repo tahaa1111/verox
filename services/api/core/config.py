@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     arq_max_jobs: int = 1               # one GPU job at a time
     arq_job_timeout: int = 180          # seconds
     arq_health_check_interval: int = 30 # seconds — conserves Upstash free tier
+    # poll_delay: how often the worker checks the queue for new jobs.
+    # Default arq value is 0.5s (ZRANGEBYSCORE every 0.5s = 5.18M cmds/month on
+    # Upstash free 500K tier). 2.0s = 1.3M cmds/month — still over budget but
+    # far better; combine with Render spin-down so it only runs during clinic hours.
+    arq_poll_delay: float = 2.0
 
     # ── Camera relay ─────────────────────────────────────────────────────────
     camera_secret: str = "medibox-camera-dev-secret"
@@ -98,8 +103,16 @@ class Settings(BaseSettings):
     db_max_overflow: int = 2
 
     # ── Observability ────────────────────────────────────────────────────────
-    metrics_secret: str = ""            # Bearer token required to scrape /metrics
-    sentry_dsn: str = ""                # Sentry project DSN
+    # metrics_secret kept for config-compat but the scrape endpoint is removed.
+    metrics_secret: str = ""
+    sentry_dsn: str = ""                # Sentry project DSN (kept for error tracking)
+
+    # Grafana Cloud OTLP push (traces + metrics).
+    # Endpoint format: https://otlp-gateway-prod-<region>.grafana.net/otlp
+    # Token needs scopes: traces:write  metrics:write
+    grafana_cloud_otlp_endpoint: str = ""
+    grafana_cloud_instance_id: str = ""   # numeric stack / instance ID
+    grafana_cloud_token: str = ""
 
 
 @lru_cache
