@@ -39,9 +39,7 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
       } else if (msg.includes("operation-not-allowed")) {
         setError("Email/password sign-in is not enabled. Contact admin.");
       } else {
-        // Show raw Firebase error code for debugging
-        const code = msg.match(/\(auth\/[^)]+\)/)?.[0] ?? "";
-        setError(`Sign-in failed${code ? ": " + code : ""}. Contact admin if this persists.`);
+        setError("Sign-in failed. Please check your credentials or contact your administrator.");
       }
     } finally {
       setLoading(false);

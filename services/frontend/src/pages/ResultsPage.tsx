@@ -23,6 +23,22 @@ import type { PrescriptionResult, CropText } from "../types";
 // Helpers
 // ---------------------------------------------------------------------------
 
+function cleanError(raw: string | null | undefined): string {
+  if (!raw) return "An unknown error occurred.";
+  // Safety filter: strip "Safety filter: track_id=N: " prefix, keep the human sentence
+  const safetyMatch = raw.match(/Safety filter[^:]*:\s*(?:track_id=\d+:\s*)?(.+)/i);
+  if (safetyMatch) return safetyMatch[1];
+  // GPU timeout
+  if (raw.includes("RetryError") || raw.includes("ReadTimeout") || raw.includes("TimeoutError"))
+    return "GPU inference timed out — the model server was cold. Please try again.";
+  // Circuit breaker open
+  if (raw.includes("CircuitOpen") || raw.includes("circuit"))
+    return "Inference service is temporarily unavailable. Please try again in a moment.";
+  // Cancelled
+  if (raw.includes("Cancelled by user")) return "Scan cancelled.";
+  return raw;
+}
+
 function confColor(v: number): string {
   if (v >= 0.75) return "bg-emerald-100 text-emerald-800 border-emerald-200";
   if (v >= 0.50) return "bg-amber-100 text-amber-800 border-amber-200";
@@ -434,9 +450,7 @@ export function ResultsPage() {
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-700">
           <p className="font-semibold">Processing failed</p>
           <p className="mt-1 text-red-600">
-            {job.error_message?.includes("RetryError") || job.error_message?.includes("ReadTimeout")
-              ? "GPU inference timed out — the model server was cold. Please try again."
-              : (job.error_message ?? "An unknown error occurred.")}
+            {cleanError(job.error_message)}
           </p>
           <div className="mt-3 flex gap-2">
             <button
