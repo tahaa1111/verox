@@ -25,6 +25,8 @@ import base64
 import logging
 from typing import TYPE_CHECKING
 
+from opentelemetry.sdk.trace import SpanProcessor
+
 if TYPE_CHECKING:
     pass
 
@@ -35,9 +37,6 @@ _PII_ATTRS = frozenset({
     "x-camera-secret", "password", "image_base64", "frame",
     "raw_output", "db.statement",   # SQL statements may contain PII
 })
-
-
-from opentelemetry.sdk.trace import SpanProcessor
 
 
 class PiiScrubSpanProcessor(SpanProcessor):
