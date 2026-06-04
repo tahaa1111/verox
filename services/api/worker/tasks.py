@@ -315,16 +315,20 @@ async def _update_job(
     if requires_review:
         updates["requires_human_review"] = True
     if review_reasons:
-        updates["review_reasons"] = review_reasons
+        # asyncpg needs a real list for ARRAY columns via raw SQL
+        updates["review_reasons"] = list(review_reasons)
 
     set_clause = ", ".join(f"{k} = :{k}" for k in updates)
-    updates["job_id"] = job_id
+    # Pass job_id as uuid.UUID so asyncpg binds the type correctly without
+    # needing ::uuid cast (which confuses SQLAlchemy's text() parameter parser)
+    import uuid as _uuid
+    updates["job_id"] = _uuid.UUID(job_id) if isinstance(job_id, str) else job_id
 
     try:
         session_factory = ctx["db_session_factory"]
         async with session_factory() as session:
             await session.execute(
-                text(f"UPDATE jobs SET {set_clause} WHERE id = :job_id::uuid"),
+                text(f"UPDATE jobs SET {set_clause} WHERE id = :job_id"),
                 updates,
             )
             await session.commit()
@@ -374,9 +378,10 @@ async def _compute_queue_wait(ctx: dict, job_id: str) -> int:
     try:
         session_factory = ctx["db_session_factory"]
         async with session_factory() as session:
+            import uuid as _uuid
             result = await session.execute(
-                text("SELECT created_at FROM jobs WHERE id = :job_id::uuid"),
-                {"job_id": job_id},
+                text("SELECT created_at FROM jobs WHERE id = :job_id"),
+                {"job_id": _uuid.UUID(job_id) if isinstance(job_id, str) else job_id},
             )
             row = result.fetchone()
             if row:
@@ -397,6 +402,7 @@ async def _write_dead_letter(
     attempts: int,
 ) -> None:
     """Write exhausted job to failed_jobs table for manual review / re-run."""
+    import uuid as _uuid
     try:
         session_factory = ctx["db_session_factory"]
         async with session_factory() as session:
@@ -405,14 +411,14 @@ async def _write_dead_letter(
                     INSERT INTO failed_jobs
                         (job_id, payload_snapshot, last_error, attempts, failed_at)
                     VALUES
-                        (:job_id::uuid, :payload, :error, :attempts, NOW())
+                        (:job_id, :payload, :error, :attempts, NOW())
                     ON CONFLICT (job_id) DO UPDATE
                         SET last_error = EXCLUDED.last_error,
                             attempts   = EXCLUDED.attempts,
                             failed_at  = EXCLUDED.failed_at
                 """),
                 {
-                    "job_id": job_id,
+                    "job_id": _uuid.UUID(job_id) if isinstance(job_id, str) else job_id,
                     "payload": json.dumps({
                         "device_id": payload.get("device_id"),
                         "session_id": payload.get("session_id"),
