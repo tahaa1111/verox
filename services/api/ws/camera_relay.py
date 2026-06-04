@@ -18,7 +18,6 @@ Command message (browser → relay → Pi):
 
 from __future__ import annotations
 
-import asyncio
 import time
 from collections import defaultdict
 

@@ -97,7 +97,6 @@ variable "pii_encryption_key" {
   description = "MultiFernet current key — generate: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
   type        = string
   sensitive   = true
-  default     = "4Od5bcywunm0AaH_uy__U-Is-Q20Mv52Ql5Sp1Ue1ME="
 }
 
 variable "pii_encryption_key_prev" {
@@ -119,14 +118,12 @@ variable "metrics_secret" {
   description = "Bearer token for Prometheus /metrics endpoint"
   type        = string
   sensitive   = true
-  default     = "mI7mj9w_7dXfqhptuFAMx1EhXoV2CB-acamGu6-O0pA"
 }
 
 variable "camera_secret" {
   description = "HMAC secret for Pi camera relay authentication"
   type        = string
   sensitive   = true
-  default     = "medibox-camera-prod-secret-2026"
 }
 
 variable "sentry_dsn" {

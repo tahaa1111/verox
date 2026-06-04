@@ -2,7 +2,7 @@
 Set Firebase custom claim { admin: true } on a user account.
 
 Usage:
-    python scripts/set_admin_claim.py guesmitaha96@gmail.com
+    python scripts/set_admin_claim.py <email>
 
 Requires: firebase-admin (pip install firebase-admin)
 Uses application default credentials (gcloud auth application-default login)
@@ -12,7 +12,10 @@ import firebase_admin
 from firebase_admin import auth
 
 def main():
-    email = sys.argv[1] if len(sys.argv) > 1 else "guesmitaha96@gmail.com"
+    if len(sys.argv) < 2:
+        print("Usage: python scripts/set_admin_claim.py <email>")
+        sys.exit(1)
+    email = sys.argv[1]
 
     # Use application default credentials (works after: gcloud auth application-default login)
     firebase_admin.initialize_app()

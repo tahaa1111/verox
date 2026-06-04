@@ -31,7 +31,7 @@ from yolo_worker import yolo_loop
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-CLOUD_API = os.getenv("CLOUD_API_URL", "https://medibox-api-5w7o5tyr2q-uc.a.run.app")
+CLOUD_API = os.getenv("CLOUD_API_URL", "https://medibox-api-production.up.railway.app")
 DEVICE_ID = os.getenv("DEVICE_ID", "pi-0001")
 EDGE_CONFIG = os.getenv("EDGE_CONFIG", "/etc/medibox/edge.toml")
 
