@@ -18,6 +18,7 @@ Steps in order:
 
 import json
 import math
+import os
 import re
 from typing import Any, Optional
 
@@ -34,10 +35,10 @@ from services.worker.utils.specialty_validator import (
 
 logger = structlog.get_logger(__name__)
 
-# Calibration weights (DD-007)
-W_LOGPROB = 0.50
-W_FORMULARY = 0.35
-W_COMPLETENESS = 0.15
+# Calibration weights — configurable via env vars (DD-007)
+W_LOGPROB     = float(os.getenv("CONF_W_LOGPROB",     "0.50"))
+W_FORMULARY   = float(os.getenv("CONF_W_FORMULARY",   "0.35"))
+W_COMPLETENESS = float(os.getenv("CONF_W_COMPLETENESS", "0.15"))
 
 # Required fields for completeness scoring
 REQUIRED_FIELDS = ["patient_name", "doctor_name", "issue_date", "medications"]
@@ -283,6 +284,17 @@ def run_postprocessing(
     )
     calibrated_conf = round(max(0.05, min(0.98, calibrated_conf)), 4)
     result["overall_confidence"] = calibrated_conf
+    # Per-component breakdown — shown in admin UI and logs for debugging
+    result["confidence_components"] = {
+        "logprob":      round(logprob_conf, 4),
+        "formulary":    round(avg_formulary, 4),
+        "completeness": round(completeness, 4),
+        "weights": {
+            "logprob":      W_LOGPROB,
+            "formulary":    W_FORMULARY,
+            "completeness": W_COMPLETENESS,
+        },
+    }
 
     # Per-medication field confidences (approximation from logprobs)
     for med in result.get("medications", []):

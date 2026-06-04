@@ -27,7 +27,83 @@ _VLLM_URL     = os.getenv("VLLM_URL", "http://localhost:8000")
 _VLLM_API_KEY = os.getenv("VLLM_API_KEY", "")
 _VLLM_MODEL   = os.getenv("VLLM_MODEL", "qwen2.5-vl-7b-instruct")
 
+# Set VLLM_GUIDED_DECODING=false to fall back to soft json_object mode
+# if the RunPod vLLM version doesn't support guided decoding with AWQ multimodal.
+_GUIDED_DECODING = os.getenv("VLLM_GUIDED_DECODING", "true").lower() == "true"
+
 _TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=5.0)
+
+# JSON schema enforced at the token level via vLLM guided decoding.
+# The model cannot emit keys outside this schema or wrong types.
+# Kept intentionally narrow — only fields the postprocessing pipeline reads.
+_PRESCRIPTION_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "image_type": {
+            "type": "string",
+            "enum": ["prescription", "drug_box", "unknown", "blank"],
+        },
+        "prescription_id": {"type": ["string", "null"]},
+        "patient": {
+            "type": "object",
+            "properties": {
+                "name":       {"type": ["string", "null"]},
+                "last_name":  {"type": ["string", "null"]},
+                "address":    {"type": ["string", "null"]},
+                "profession": {"type": ["string", "null"]},
+            },
+        },
+        "doctor": {
+            "type": "object",
+            "properties": {
+                "name":  {"type": ["string", "null"]},
+                "stamp": {"type": ["string", "null"]},
+            },
+        },
+        "issue_date":         {"type": ["string", "null"]},
+        "additional_notes":   {"type": ["string", "null"]},
+        "extracted_raw_text": {"type": "string"},
+        "overall_confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "medications": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "drug_name":    {"type": ["string", "null"]},
+                    "dosage":       {"type": ["string", "null"]},
+                    "frequency":    {"type": ["string", "null"]},
+                    "duration":     {"type": ["string", "null"]},
+                    "quantity":     {"type": ["string", "null"]},
+                    "instructions": {"type": ["string", "null"]},
+                    "warnings":     {"type": ["string", "null"]},
+                    "cnam":         {"type": "boolean"},
+                    "track_id":     {"type": "integer"},
+                },
+                "required": ["drug_name", "cnam", "track_id"],
+            },
+        },
+        "cell_texts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "cell":             {"type": "integer"},
+                    "text":             {"type": "string"},
+                    "cell_type": {
+                        "type": "string",
+                        "enum": ["prescription", "drug_box", "blank"],
+                    },
+                    "model_confidence": {"type": "number"},
+                },
+                "required": ["cell", "text", "cell_type", "model_confidence"],
+            },
+        },
+    },
+    "required": [
+        "image_type", "medications", "extracted_raw_text",
+        "cell_texts", "overall_confidence",
+    ],
+}
 
 
 def _load_system_prompt() -> str:
@@ -75,7 +151,7 @@ def _build_payload(grid_b64: str, cell_count: int, crop_slots: list | None) -> d
         f"{bbox_hints}{strip_note}"
         f"Extract the complete prescription from all {cell_count} cell(s). Return JSON."
     )
-    return {
+    payload: dict = {
         "model": _VLLM_MODEL,
         "messages": [
             {"role": "system", "content": system_prompt},
@@ -85,12 +161,21 @@ def _build_payload(grid_b64: str, cell_count: int, crop_slots: list | None) -> d
                 {"type": "text", "text": user_text},
             ]},
         ],
-        "max_tokens": 1536,   # grid 1024px ~700 img tokens + ~1900 system/user + 1536 output = ~4136, fits in 8192
+        "max_tokens": 1536,
         "temperature": 0.0,
+        "seed": 42,
         "logprobs": True,
         "top_logprobs": 3,
-        "response_format": {"type": "json_object"},
     }
+    if _GUIDED_DECODING:
+        # Structural schema enforcement at token level — model cannot emit
+        # keys outside the schema or wrong types. Replaces soft json_object.
+        # If the RunPod vLLM build doesn't support this with AWQ multimodal,
+        # set VLLM_GUIDED_DECODING=false to fall back to the soft mode below.
+        payload["guided_json"] = _PRESCRIPTION_SCHEMA
+    else:
+        payload["response_format"] = {"type": "json_object"}
+    return payload
 
 
 def _parse_response(data: dict, t0: float, job_id: str, model_version: str,
@@ -133,8 +218,15 @@ async def infer_grid_async(
         headers["Authorization"] = f"Bearer {_VLLM_API_KEY}"
 
     import asyncio
+    guided_active = _GUIDED_DECODING  # local flag — can be disabled mid-job
     for attempt in range(1, max_attempts + 1):
         t0 = time.perf_counter()
+        if guided_active:
+            payload["guided_json"] = _PRESCRIPTION_SCHEMA
+            payload.pop("response_format", None)
+        else:
+            payload.pop("guided_json", None)
+            payload["response_format"] = {"type": "json_object"}
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
                 resp = await client.post(
@@ -142,6 +234,14 @@ async def infer_grid_async(
                     json=payload,
                     headers=headers,
                 )
+                # Guided decoding unsupported → fall back automatically once
+                if resp.status_code == 400 and guided_active:
+                    body = resp.text
+                    if "guided" in body.lower() or "grammar" in body.lower() or "xgrammar" in body.lower():
+                        logger.warning("guided_decoding_unsupported_falling_back",
+                                       job_id=job_id, detail=body[:200])
+                        guided_active = False
+                        continue
                 resp.raise_for_status()
             return _parse_response(
                 resp.json(), t0, job_id, model_version, prompt_version, cell_count
