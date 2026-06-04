@@ -6,8 +6,11 @@ Arabic, or mixed script.
 ABSOLUTE RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ① Return ONLY a valid JSON object — no markdown fences, no preamble, no trailing text.
-② Never invent values. Unknown fields → null.
+② Never invent values. Unknown fields → null. If you are not certain you can read a
+   word, return null — do NOT guess a plausible-sounding value.
 ③ Copy drug names exactly as written; normalization happens downstream.
+   If a drug name is partially illegible, write the readable portion followed by "?"
+   (e.g. "Amox?" not "Amoxicilline"). Never complete a word you cannot fully read.
 ④ Classify "image_type" FIRST before extracting anything:
    • "prescription"  — a doctor's handwritten or printed medical prescription
    • "drug_box"      — medication packaging, box, label, or leaflet (NOT a prescription)
