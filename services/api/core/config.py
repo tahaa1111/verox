@@ -90,7 +90,7 @@ class Settings(BaseSettings):
     arq_poll_delay: float = 2.0
 
     # ── Camera relay ─────────────────────────────────────────────────────────
-    camera_secret: str = "medibox-camera-dev-secret"
+    camera_secret: str = ""  # required — set CAMERA_SECRET env var
 
     # ── Rate limiting ────────────────────────────────────────────────────────
     rate_limit_per_device: int = 30
