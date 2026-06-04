@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { submitCapture, pollJob } from "../api";
+import { submitCapture, pollJob, triggerWarmup } from "../api";
 import { useStore } from "../store";
 
 type CameraState = "idle" | "streaming" | "error";
@@ -80,6 +80,7 @@ export function CameraPage() {
   const [stableProgress, setStableProgress] = useState(0);
   const [capturing,      setCapturing]      = useState(false);
   const [queuedFlash,    setQueuedFlash]    = useState<string | null>(null);
+  const [gpuWarming,     setGpuWarming]     = useState(false);
 
   const { jobQueue, addToQueue, removeFromQueue, upsertJob } = useStore();
 
@@ -107,6 +108,16 @@ export function CameraPage() {
   }, []);
 
   useEffect(() => () => stopCamera(true), [stopCamera]);
+
+  // ── Warmup RunPod on mount — load GPU worker before first scan ───────────
+  useEffect(() => {
+    setGpuWarming(true);
+    triggerWarmup().finally(() => {
+      // Show "warming" for at least 3s so the user knows something is happening,
+      // then clear regardless of whether warmup finished (it takes 30–90s total).
+      setTimeout(() => setGpuWarming(false), 3000);
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Poll any queued jobs on mount to clear stale entries ─────────────────
   useEffect(() => {
@@ -302,6 +313,14 @@ export function CameraPage() {
           >
             View queue →
           </Link>
+        </div>
+      )}
+
+      {/* GPU warmup indicator */}
+      {gpuWarming && cameraState === "idle" && (
+        <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          <div className="w-3 h-3 border border-amber-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+          Warming up GPU — first scan may take 60–90 s. Subsequent scans will be faster.
         </div>
       )}
 

@@ -76,6 +76,22 @@ export async function cancelJob(jobId: string): Promise<void> {
 }
 
 /**
+ * Fire-and-forget RunPod warmup. Call when the camera page mounts so the
+ * GPU worker is loaded before the first scan. Silently ignores rate-limit
+ * (429) since that means a warmup is already in flight.
+ */
+export async function triggerWarmup(): Promise<void> {
+  try {
+    await http.post("/warmup");
+  } catch (e: unknown) {
+    // 429 = already warming up — fine. Any other error is non-fatal.
+    if (axios.isAxiosError(e) && e.response?.status !== 429) {
+      console.warn("[warmup] failed:", e.message);
+    }
+  }
+}
+
+/**
  * Submit one or more base64-encoded images directly to the pipeline,
  * bypassing the Pi/YOLO layer. Each image is treated as a full-frame crop.
  * Returns the job_id for tracking via WebSocket / results page.

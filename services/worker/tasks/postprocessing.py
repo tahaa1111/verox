@@ -35,10 +35,15 @@ from services.worker.utils.specialty_validator import (
 
 logger = structlog.get_logger(__name__)
 
-# Calibration weights — configurable via env vars (DD-007)
-W_LOGPROB     = float(os.getenv("CONF_W_LOGPROB",     "0.50"))
-W_FORMULARY   = float(os.getenv("CONF_W_FORMULARY",   "0.35"))
-W_COMPLETENESS = float(os.getenv("CONF_W_COMPLETENESS", "0.15"))
+# Calibration weights — configurable via env vars (DD-007 / Fix 8).
+# guided_json constrained decoding skews token probabilities, making raw
+# logprobs unreliable. Reduced from 0.50 to 0.25; formulary match score and
+# completeness are trustworthy under constrained decoding so their weights
+# are increased. Specialty score added as a 4th soft term (Fix 7).
+W_LOGPROB      = float(os.getenv("CONF_W_LOGPROB",      "0.25"))
+W_FORMULARY    = float(os.getenv("CONF_W_FORMULARY",    "0.45"))
+W_COMPLETENESS = float(os.getenv("CONF_W_COMPLETENESS", "0.20"))
+W_SPECIALTY    = float(os.getenv("CONF_W_SPECIALTY",    "0.10"))
 
 # Required fields for completeness scoring
 REQUIRED_FIELDS = ["patient_name", "doctor_name", "issue_date", "medications"]
@@ -253,10 +258,13 @@ def run_postprocessing(
     result["specialty_checked"] = specialty_result.get("specialty_checked", False)
     result["specialty_normalized"] = specialty_result.get("specialty_normalized")
 
+    # Fix 7: specialty mismatch is a soft signal, not a hard flag.
+    # GPs routinely prescribe across specialties. A mismatch lowers confidence
+    # (handled in calibration below via prescription_specialty_score) but must
+    # never add to review_reasons on its own — that causes false positives.
     if specialty_result.get("any_mismatch"):
-        review_reasons.append("specialty_drug_mismatch")
         log.info(
-            "specialty_mismatch",
+            "specialty_mismatch_soft",
             specialty=specialty_result.get("specialty_normalized"),
             prescription_score=specialty_result.get("prescription_score"),
         )
@@ -277,22 +285,25 @@ def run_postprocessing(
     avg_formulary = sum(formulary_scores) / len(formulary_scores) if formulary_scores else 0.0
     completeness = _compute_completeness(result)
 
+    specialty_score = result.get("prescription_specialty_score", 1.0)
     calibrated_conf = (
-        W_LOGPROB * logprob_conf +
-        W_FORMULARY * avg_formulary +
-        W_COMPLETENESS * completeness
+        W_LOGPROB      * logprob_conf +
+        W_FORMULARY    * avg_formulary +
+        W_COMPLETENESS * completeness +
+        W_SPECIALTY    * float(specialty_score)
     )
     calibrated_conf = round(max(0.05, min(0.98, calibrated_conf)), 4)
     result["overall_confidence"] = calibrated_conf
-    # Per-component breakdown — shown in admin UI and logs for debugging
     result["confidence_components"] = {
         "logprob":      round(logprob_conf, 4),
         "formulary":    round(avg_formulary, 4),
         "completeness": round(completeness, 4),
+        "specialty":    round(float(specialty_score), 4),
         "weights": {
             "logprob":      W_LOGPROB,
             "formulary":    W_FORMULARY,
             "completeness": W_COMPLETENESS,
+            "specialty":    W_SPECIALTY,
         },
     }
 
