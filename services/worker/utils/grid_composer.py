@@ -26,11 +26,14 @@ from dataclasses import dataclass
 from PIL import Image, ImageDraw
 
 # Grid constants
-GRID_SIZE = 1536           # total canvas
+# 1024px instead of 1536px: each cell becomes 341×341 instead of 512×512.
+# Cuts Qwen2.5-VL image tokens from ~1600 to ~700, freeing ~900 tokens for
+# JSON output — enough for full cell_texts + medications within 4096 context.
+GRID_SIZE = 1024           # total canvas
 CELLS_PER_ROW = 3
-CELL_SIZE = GRID_SIZE // CELLS_PER_ROW   # 512px
-CELL_PADDING = 16          # whitespace inside each cell
-CONTENT_SIZE = CELL_SIZE - 2 * CELL_PADDING  # 480px usable
+CELL_SIZE = GRID_SIZE // CELLS_PER_ROW   # 341px
+CELL_PADDING = 8           # whitespace inside each cell
+CONTENT_SIZE = CELL_SIZE - 2 * CELL_PADDING  # 325px usable
 BORDER_COLOR = (220, 50, 50)   # red border
 BORDER_WIDTH = 2
 LABEL_COLOR = (220, 50, 50)
