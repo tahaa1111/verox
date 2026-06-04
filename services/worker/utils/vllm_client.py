@@ -85,7 +85,7 @@ def _build_payload(grid_b64: str, cell_count: int, crop_slots: list | None) -> d
                 {"type": "text", "text": user_text},
             ]},
         ],
-        "max_tokens": 4096,
+        "max_tokens": 1536,   # input (image + prompt) ~2000 tokens + 1536 output = fits in 4096 context
         "temperature": 0.0,
         "logprobs": True,
         "top_logprobs": 3,
