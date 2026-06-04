@@ -85,7 +85,7 @@ def _build_payload(grid_b64: str, cell_count: int, crop_slots: list | None) -> d
                 {"type": "text", "text": user_text},
             ]},
         ],
-        "max_tokens": 1200,   # grid 1024px ~700 img tokens + ~900 system/user + 1200 output = ~2800, fits in 4096
+        "max_tokens": 1536,   # grid 1024px ~700 img tokens + ~1900 system/user + 1536 output = ~4136, fits in 8192
         "temperature": 0.0,
         "logprobs": True,
         "top_logprobs": 3,
