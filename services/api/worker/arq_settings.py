@@ -3,7 +3,7 @@ arq WorkerSettings — runs inside the FastAPI process (same event loop).
 
 Design choices:
   max_jobs=1           Only one inference at a time (GPU serialises requests).
-  job_timeout=180      Hard kill after 3 min — matches old Celery time_limit.
+  job_timeout=360      6 min — covers RunPod serverless cold start (60s) + inference.
   health_check_interval=30  Reduces Redis polling to ~3 000 commands/day so
                              we stay within Upstash free tier (10 000/day).
   keep_result=3600     Keep arq result key in Redis for 1 h (enough for WS).
@@ -38,7 +38,7 @@ class WorkerSettings:
 
     # Single GPU job at a time — must not prefetch
     max_jobs = 1
-    job_timeout = 180           # seconds — hard kill
+    job_timeout = 360           # seconds — RunPod cold start ~60s + inference ~60s + overhead
     keep_result = 3600          # seconds — keep result in Redis
     # Raised from 0.5s default: each ZRANGEBYSCORE = 1 Upstash command.
     # 0.5s → 5.18M/month; 2.0s → 1.3M/month. Set ARQ_POLL_DELAY env var to tune.
