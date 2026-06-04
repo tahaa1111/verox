@@ -137,29 +137,34 @@ def _build_bbox_hints(crop_slots: list | None) -> str:
     return "Spatial context (original frame positions):\n" + "\n".join(lines) + "\n\n"
 
 
-def _build_payload(grid_b64: str, cell_count: int, crop_slots: list | None) -> dict:
+def _build_payload(strips_b64: list[str], crop_slots: list | None) -> dict:
+    """Build payload with individual strip images — no grid packing.
+
+    Each strip is a separate image in the content array at its native aspect
+    ratio. Qwen2.5-VL processes each image with full token budget rather than
+    dividing attention across a composed 1024x1024 grid.
+    """
     system_prompt = _load_system_prompt()
     bbox_hints    = _build_bbox_hints(crop_slots)
-    strip_note = (
-        "These cells are HORIZONTAL STRIPS of the SAME prescription, ordered top→bottom.\n"
-        "Top cells = doctor header + date. Middle = patient + medications. "
-        "Bottom = remaining medications + CNAM + instructions.\n"
-        "Drug BOX cells (packaging) → mark cell_type=drug_box, skip medications.\n"
-        "Combine ALL cells into one unified JSON result.\n"
-    )
+
+    content: list[dict] = []
+    for b64 in strips_b64:
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+        })
     user_text = (
-        f"{bbox_hints}{strip_note}"
-        f"Extract the complete prescription from all {cell_count} cell(s). Return JSON."
+        f"{bbox_hints}"
+        f"Extract the complete prescription from all {len(strips_b64)} strip(s) above. "
+        "Return JSON."
     )
+    content.append({"type": "text", "text": user_text})
+
     payload: dict = {
         "model": _VLLM_MODEL,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": [
-                {"type": "image_url",
-                 "image_url": {"url": f"data:image/jpeg;base64,{grid_b64}"}},
-                {"type": "text", "text": user_text},
-            ]},
+            {"role": "user", "content": content},
         ],
         "max_tokens": 1536,
         "temperature": 0.0,
@@ -168,10 +173,6 @@ def _build_payload(grid_b64: str, cell_count: int, crop_slots: list | None) -> d
         "top_logprobs": 3,
     }
     if _GUIDED_DECODING:
-        # Structural schema enforcement at token level — model cannot emit
-        # keys outside the schema or wrong types. Replaces soft json_object.
-        # If the RunPod vLLM build doesn't support this with AWQ multimodal,
-        # set VLLM_GUIDED_DECODING=false to fall back to the soft mode below.
         payload["guided_json"] = _PRESCRIPTION_SCHEMA
     else:
         payload["response_format"] = {"type": "json_object"}
@@ -199,26 +200,28 @@ def _parse_response(data: dict, t0: float, job_id: str, model_version: str,
 # Async variant (used by arq worker)
 # ---------------------------------------------------------------------------
 
-async def infer_grid_async(
-    grid_b64: str,
+async def infer_strips_async(
+    strips_b64: list[str],
     job_id: str,
-    cell_count: int,
     model_version: str = "",
     prompt_version: str = "v1",
     crop_slots: list | None = None,
-    _attempt: int = 1,
 ) -> dict[str, Any]:
-    """Async inference with manual retry (tenacity doesn't support async well here)."""
+    """Send strips as individual images — no grid packing.
+
+    Each base64 string in strips_b64 is a separate image in the request.
+    The model sees each strip at native aspect ratio with full token budget.
+    """
     max_attempts = 40
     wait_min, wait_max = 4, 60
 
-    payload = _build_payload(grid_b64, cell_count, crop_slots)
+    payload = _build_payload(strips_b64, crop_slots)
     headers: dict[str, str] = {}
     if _VLLM_API_KEY:
         headers["Authorization"] = f"Bearer {_VLLM_API_KEY}"
 
     import asyncio
-    guided_active = _GUIDED_DECODING  # local flag — can be disabled mid-job
+    guided_active = _GUIDED_DECODING
     for attempt in range(1, max_attempts + 1):
         t0 = time.perf_counter()
         if guided_active:
@@ -234,7 +237,6 @@ async def infer_grid_async(
                     json=payload,
                     headers=headers,
                 )
-                # Guided decoding unsupported → fall back automatically once
                 if resp.status_code == 400 and guided_active:
                     body = resp.text
                     if "guided" in body.lower() or "grammar" in body.lower() or "xgrammar" in body.lower():
@@ -244,7 +246,8 @@ async def infer_grid_async(
                         continue
                 resp.raise_for_status()
             return _parse_response(
-                resp.json(), t0, job_id, model_version, prompt_version, cell_count
+                resp.json(), t0, job_id, model_version, prompt_version,
+                cell_count=len(strips_b64),
             )
         except Exception as exc:
             if attempt >= max_attempts:
@@ -256,7 +259,15 @@ async def infer_grid_async(
                           wait=wait, exc=str(exc)[:100])
             await asyncio.sleep(wait)
 
-    raise RuntimeError("infer_grid_async: unreachable")
+    raise RuntimeError("infer_strips_async: unreachable")
+
+
+# Keep old name as alias so any external callers don't break
+async def infer_grid_async(grid_b64: str, job_id: str, cell_count: int = 1,
+                            model_version: str = "", prompt_version: str = "v1",
+                            crop_slots: list | None = None, **_) -> dict[str, Any]:
+    return await infer_strips_async([grid_b64], job_id, model_version,
+                                    prompt_version, crop_slots)
 
 
 # ---------------------------------------------------------------------------

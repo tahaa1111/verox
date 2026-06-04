@@ -104,12 +104,8 @@ async def run_pipeline(ctx: dict, job_id: str, payload: dict, prefix: str) -> di
                 log.warning("r2_upload_skipped", track_id=track_id,
                            reason=str(r2_exc)[:120])
 
-        # 3. Compose grids (CPU-bound — thread pool)
-        from services.worker.utils.grid_composer import compose_grids
-        grids = await asyncio.to_thread(compose_grids, crops)
         preprocessing_ms = int((time.perf_counter() - t0) * 1000)
-        log.info("preprocessing_done", crop_count=len(crops), grid_count=len(grids),
-                ms=preprocessing_ms)
+        log.info("preprocessing_done", crop_count=len(crops), ms=preprocessing_ms)
         await _ws_publish(redis_url, job_id, {
             "event": "inference_progress", "job_id": job_id,
             "stage": "ocr", "progress": 0.3, "ts": _now(),
@@ -122,59 +118,55 @@ async def run_pipeline(ctx: dict, job_id: str, payload: dict, prefix: str) -> di
             }
             for i, crop in enumerate(crops)
         }
+        # slot_map: strip number (1-based) → original track_id
+        slot_map = {i + 1: crops[i].get("track_id", i) for i in range(len(crops))}
 
-        # 4. RunPod inference (async httpx + circuit breaker)
+        # 3. RunPod inference — strips sent as individual images, no grid packing
         await _update_job(ctx, job_id, "inferring")
         t1 = time.perf_counter()
         active_model = await _get_active_model_version(ctx)
-        all_raw_outputs: list[dict] = []
 
-        # Skip inference on warmup jobs — just prove the pipeline runs
         if payload.get("_warmup"):
             log.info("warmup_job_short_circuit")
             return {"job_id": job_id, "status": "warmup_complete"}
 
-        for i, grid in enumerate(grids):
-            if await _is_cancelled(redis_url, job_id):
-                log.info("pipeline_cancelled_by_user")
-                await _update_job(ctx, job_id, "cancelled", error="Cancelled by user.")
-                await _ws_publish(redis_url, job_id, {
-                    "event": "cancelled", "job_id": job_id, "ts": _now(),
-                })
-                return {"job_id": job_id, "status": "cancelled"}
-
-            # Circuit breaker check before every RunPod call
-            from services.worker.utils.circuit_breaker import (
-                check_circuit, record_success, record_failure, CircuitOpenError,
-            )
-            await check_circuit(redis_url)
-
-            from services.worker.utils.vllm_client import infer_grid_async
-            try:
-                result = await infer_grid_async(
-                    grid_b64=grid.grid_b64,
-                    job_id=job_id,
-                    cell_count=len(grid.slots),
-                    model_version=active_model,
-                    crop_slots=grid.slots,
-                )
-                await record_success(redis_url)
-            except CircuitOpenError:
-                raise
-            except Exception:
-                await record_failure(redis_url)
-                raise
-
-            # Validate RunPod response shape before trusting it
-            if not isinstance(result, dict) or "raw_output" not in result:
-                raise ValueError(
-                    f"RunPod returned unexpected response shape: {str(result)[:200]}"
-                )
-            all_raw_outputs.append({"result": result, "slots": grid.slots})
+        if await _is_cancelled(redis_url, job_id):
+            log.info("pipeline_cancelled_by_user")
+            await _update_job(ctx, job_id, "cancelled", error="Cancelled by user.")
             await _ws_publish(redis_url, job_id, {
-                "event": "inference_progress", "job_id": job_id, "stage": "ocr",
-                "progress": 0.3 + 0.5 * (i + 1) / len(grids), "ts": _now(),
+                "event": "cancelled", "job_id": job_id, "ts": _now(),
             })
+            return {"job_id": job_id, "status": "cancelled"}
+
+        from services.worker.utils.circuit_breaker import (
+            check_circuit, record_success, record_failure, CircuitOpenError,
+        )
+        await check_circuit(redis_url)
+
+        from services.worker.utils.vllm_client import infer_strips_async
+        strips_b64 = [c["image_base64"] for c in crops[:9]]
+        try:
+            infer_result = await infer_strips_async(
+                strips_b64=strips_b64,
+                job_id=job_id,
+                model_version=active_model,
+            )
+            await record_success(redis_url)
+        except CircuitOpenError:
+            raise
+        except Exception:
+            await record_failure(redis_url)
+            raise
+
+        if not isinstance(infer_result, dict) or "raw_output" not in infer_result:
+            raise ValueError(
+                f"RunPod returned unexpected response shape: {str(infer_result)[:200]}"
+            )
+        all_raw_outputs = [{"result": infer_result, "slots": []}]
+        await _ws_publish(redis_url, job_id, {
+            "event": "inference_progress", "job_id": job_id,
+            "stage": "ocr", "progress": 0.8, "ts": _now(),
+        })
 
         inference_ms = int((time.perf_counter() - t1) * 1000)
 
@@ -183,11 +175,6 @@ async def run_pipeline(ctx: dict, job_id: str, payload: dict, prefix: str) -> di
         t2 = time.perf_counter()
         merged = _merge_grid_outputs(all_raw_outputs)
         queue_wait_ms = await _compute_queue_wait(ctx, job_id)
-
-        slot_map: dict[int, int] = {}
-        for grid in grids:
-            for slot in grid.slots:
-                slot_map[slot.cell_number] = slot.track_id
 
         from services.worker.tasks.postprocessing import run_postprocessing
         final_result = await asyncio.to_thread(
