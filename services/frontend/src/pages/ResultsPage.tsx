@@ -364,14 +364,13 @@ export function ResultsPage() {
   // image_type from model. Old results without the field default to "prescription".
   const imageType = result?.image_type ?? "prescription";
 
-  // "Prescription detected" section only shows for actual prescriptions with content,
-  // not for drug boxes, unknown images, blank images, or all-zero-confidence results.
+  // Show structured view for any prescription image — even low confidence.
+  // Hiding data because confidence is low is worse than showing it with a warning.
   const isPrescription = result
     ? imageType === "prescription" &&
       ((result.medications?.length ?? 0) > 0 ||
       !!(result.patient?.name ?? result.patient_name) ||
-      !!(result.doctor?.name ?? result.doctor_name)) &&
-      !reviewReasons.includes("all_drugs_low_confidence")
+      !!(result.doctor?.name ?? result.doctor_name))
     : false;
 
   const cropTexts = result?.crop_texts ?? [];
@@ -471,21 +470,46 @@ export function ResultsPage() {
 
       {result && (
         <>
-          {/* ① DETECTED TEXT — always shown first */}
-          {cropTexts.length > 0 ? (
-            <CropTexts crops={cropTexts} overallConf={overallConf} />
-          ) : result.extracted_raw_text ? (
-            /* Fallback: model returned raw text but no per-crop breakdown */
+          {/* ① RAW TEXT — always shown first, prominent, no collapse.
+               This is the ground truth the pharmacist can read directly.
+               Structured data below is derived from this text. */}
+          {result.extracted_raw_text ? (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">
-                <h2 className="text-base font-semibold text-gray-900">Detected Text</h2>
+              <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100 flex-wrap">
+                <h2 className="text-base font-semibold text-gray-900">Read Text</h2>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${confColor(overallConf)}`}>
-                  {confLabel(overallConf)} confidence · {(overallConf * 100).toFixed(0)}%
+                  {confLabel(overallConf)} · {(overallConf * 100).toFixed(0)}%
                 </span>
+                {cropTexts.length > 0 && (
+                  <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium border border-blue-100">
+                    {cropTexts.length} strip{cropTexts.length !== 1 ? "s" : ""}
+                  </span>
+                )}
               </div>
-              <pre className="text-sm text-gray-800 font-mono whitespace-pre-wrap break-words leading-relaxed p-4">
-                {result.extracted_raw_text}
-              </pre>
+              {cropTexts.length > 0 ? (
+                <div className="divide-y divide-gray-50">
+                  {cropTexts.map((crop, i) => (
+                    <div key={i} className="p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Strip {crop.cell}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded font-mono font-medium border ${confColor(crop.yolo_confidence)}`}>
+                          YOLO {(crop.yolo_confidence * 100).toFixed(0)}%
+                        </span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded font-mono font-medium border ${confColor(crop.model_confidence)}`}>
+                          Read {(crop.model_confidence * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <pre className="text-sm text-gray-800 font-mono whitespace-pre-wrap break-words leading-relaxed">
+                        {crop.text || <span className="text-gray-300 italic">No text in this strip</span>}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <pre className="text-sm text-gray-800 font-mono whitespace-pre-wrap break-words leading-relaxed p-4">
+                  {result.extracted_raw_text}
+                </pre>
+              )}
             </div>
           ) : null}
 
@@ -550,14 +574,22 @@ export function ResultsPage() {
             </div>
           )}
 
-          {/* ② PRESCRIPTION STRUCTURE — Patient + Doctor + Medications in one card */}
+          {/* ② STRUCTURED DATA — shown whenever prescription content was found */}
           {isPrescription && (
             <PrescriptionDetails result={result} needsReview={needsReview} />
           )}
 
-          {/* ③ LABEL TEXT BLOCKS — collapsed by default */}
-          {result.extracted_raw_text && (
-            <RawTextLabelPanel rawText={result.extracted_raw_text} />
+          {/* Low confidence warning when structured data is shown but uncertain */}
+          {isPrescription && reviewReasons.includes("all_drugs_low_confidence") && (
+            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+              <svg className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856C19 19 20 17.657 20 16.19c0-.98-.503-1.84-1.263-2.37L12 3 5.263 13.82C4.503 14.35 4 15.21 4 16.19 4 17.657 4.982 19 6.144 19z"/>
+              </svg>
+              <span>
+                <strong>Low confidence — verify from the Read Text above.</strong> The model could not read all fields clearly. Do not dispense based on extracted data alone.
+              </span>
+            </div>
           )}
 
           {/* Additional notes */}
