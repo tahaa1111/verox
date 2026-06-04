@@ -1,79 +1,63 @@
-# Medibox Cloud — AI-Assisted Prescription Reading for Tunisian Pharmacies
+# MediBox — AI Prescription OCR for Tunisian Pharmacies
 
-> **Pharmacist verification required. Medibox assists, it does not dispense.**
+Clinical decision-support system that reads handwritten Arabic/French Tunisian prescriptions using a multimodal LLM, assists pharmacists with structured medication data, and requires human verification before any dispensing action.
 
-Medibox is a clinical decision-support system that extracts structured data from handwritten Tunisian prescriptions using a fine-tuned multimodal LLM (Qwen2.5-VL-7B AWQ INT4) deployed on Google Cloud Platform.
+> **MediBox assists. The pharmacist decides.**
 
 ---
 
 ## Architecture
 
 ```
-Pi Edge Device  ──HTTPS──►  Cloud Run API  ──Celery──►  Cloud Run Worker
-                                                              │
-                                              Vertex AI Endpoint (vLLM + Qwen2.5-VL)
-                                                              │
-                                              Cloud SQL Postgres  +  Memorystore Redis
-                                                              │
-                                              Cloud Storage (GCS)  +  BigQuery
-                                                              │
-                                              Vertex AI Pipelines (monthly QLoRA retrain)
-```
-
-**Key design decisions:** see [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md)  
-**Risk register:** see [RISKS.md](RISKS.md)  
-**Cost model:** see [COSTS.md](COSTS.md)
-
----
-
-## Quick Start (local development)
-
-```bash
-# 1. Copy environment template
-cp .env.example .env
-# Edit .env — set real values for local dev only
-
-# 2. Start local services
-docker compose up -d postgres redis
-
-# 3. Run migrations
-bash scripts/02_run_migrations.sh
-
-# 4. Start API
-cd services/api && uvicorn main:app --reload --port 8080
-
-# 5. Start worker
-cd services/worker && celery -A celery_app worker -Q inference,default -c 1 --loglevel=info
-```
-
----
-
-## GCP Deployment
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for the complete step-by-step deployment guide.
-
-```bash
-# One-time setup (idempotent)
-export GCP_PROJECT_ID=your-project-id
-bash scripts/01_setup_project.sh
-
-# Deploy all Cloud Run services via Cloud Build
-gcloud builds submit --config cloudbuild.yaml .
-
-# Deploy Vertex AI vLLM endpoint (takes 20-40 min — separate pipeline)
-gcloud builds submit --config cloudbuild-vllm.yaml .
+Raspberry Pi 5 (edge)
+  imx708 camera → YOLO11 ONNX detection
+  3 horizontal strips → CLAHE color preprocessing
+  WebSocket stream → Railway relay
+         │
+         ▼
+Railway (FastAPI + arq worker)
+  /v1/submit       ← crops from Pi
+  /v1/camera/ws/*  ← live feed relay to browser
+  arq job queue    → RunPod inference
+  Neon Postgres    ← results, audit log
+  Upstash Redis    ← job queue + WS pub/sub
+         │
+         ▼
+RunPod Serverless (24GB GPU)
+  vLLM serving Qwen2.5-VL-7B-Instruct-AWQ
+  guided JSON decoding (schema-enforced output)
+  temp=0, seed=42 — deterministic
+         │
+         ▼
+CPU Postprocessing (Railway)
+  SymSpell OCR typo correction
+  Tunisian AMM formulary fuzzy match
+  Doctor registry (TAHA.xlsx) normalization
+  spaCy NER validation
+  Specialty coherence check
+  Fernet PII encryption
+         │
+         ▼
+Vercel (React frontend)
+  Camera page  — live Pi feed, stability ring, auto-submit
+  Results page — verbatim OCR text + structured patient/doctor/medications
+  Admin panel  — job dashboard, model registry, audit log
 ```
 
 ---
 
-## Services
+## Stack
 
-| Service | Runtime | Purpose |
-|---------|---------|---------|
-| `medibox-api` | Cloud Run | FastAPI — HTTP/WS gateway, auth, job management |
-| `medibox-worker` | Cloud Run | Celery — image processing, Vertex AI inference |
-| `medibox-frontend` | Cloud Run | React SPA — pharmacist UI |
-| `medibox-vllm` | Vertex AI Endpoint | vLLM serving Qwen2.5-VL-7B AWQ INT4 on T4 GPU |
+| Layer | Technology |
+|-------|-----------|
+| Edge | Raspberry Pi 5, imx708, YOLO11 ONNX, Picamera2 |
+| API & worker | FastAPI, arq, Python 3.11, Railway |
+| Inference | Qwen2.5-VL-7B-Instruct-AWQ, vLLM, RunPod Serverless |
+| Database | Neon (serverless Postgres), Upstash (serverless Redis) |
+| Storage | Cloudflare R2 (crop images) |
+| Auth | Firebase Authentication (JWT + custom claims) |
+| Frontend | React, TypeScript, Tailwind CSS, Vite, Vercel |
+| Infra as code | Terraform (Neon, RunPod, Upstash, Cloudflare) |
 
 ---
 
@@ -82,63 +66,73 @@ gcloud builds submit --config cloudbuild-vllm.yaml .
 ```
 medibox-cloud/
 ├── services/
-│   ├── api/          # FastAPI application
-│   ├── worker/       # Celery worker + utilities
-│   ├── vllm/         # vLLM server + Vertex AI container
-│   └── frontend/     # React + TypeScript SPA
-├── migrations/       # Alembic database migrations
-├── pipelines/        # Vertex AI KFP v2 pipeline definitions
-├── src/training/     # QLoRA training + evaluation scripts
-├── scripts/          # Setup, deployment, and utility scripts
-├── monitoring/       # Cloud Monitoring dashboards + alert policies
-├── tests/            # Unit, integration, and load tests
-│   ├── unit/
-│   ├── integration/
-│   └── load/         # Locust load test
-├── referances/       # Tunisian drug reference data (real files)
-│   ├── drug_dict.json
-│   └── drug_registry.json
-├── cloudbuild.yaml          # CI/CD: API + Worker + Frontend
-├── cloudbuild-vllm.yaml     # CI/CD: vLLM container (separate — slow)
-├── DESIGN_DECISIONS.md
-├── RISKS.md
-└── COSTS.md
+│   ├── api/            FastAPI — HTTP/WS gateway, auth, job management
+│   ├── worker/         CPU postprocessing pipeline, AMM matching, NER
+│   ├── vllm/           vLLM server config + system prompt
+│   └── frontend/       React SPA (camera + results + admin)
+├── pi_edge/            Canonical Pi source (camera, YOLO, preprocessing)
+├── migrations/         Alembic database schema
+├── referances/         Tunisian drug registry (AMM) + doctor registry (TAHA)
+├── terraform/          Infrastructure as code
+├── monitoring/         Grafana dashboards + Prometheus config
+├── scripts/            Utility scripts (admin, migrations, RunPod control)
+├── src/training/       QLoRA fine-tuning pipeline
+├── pipelines/          Scheduled monthly retrain
+├── tests/              Unit + integration tests
+└── BENCHMARK.md        CER / latency tracking across pipeline changes
 ```
 
 ---
 
-## Running Tests
+## Local Development
 
 ```bash
-# Unit tests (no GCP required)
-pip install pytest pytest-asyncio pillow rapidfuzz json-repair pydantic cryptography
-pytest tests/unit/ -v
+# 1. Copy env template
+cp .env.example .env
+# Fill in VLLM_URL, VLLM_API_KEY, REDIS_URL, DATABASE_URL, FIREBASE_*
 
-# Integration tests (requires mocked or real services)
-pytest tests/integration/ -v
+# 2. Run DB migrations
+bash scripts/02_run_migrations.sh
 
-# Load tests (requires running API)
-pip install locust
-export MEDIBOX_TOKEN="your-firebase-jwt"
-locust -f tests/load/locustfile.py --host=https://your-api-url.run.app
+# 3. Start API (Railway equivalent locally)
+cd services/api && uvicorn main:app --reload --port 8080
+
+# 4. Frontend
+cd services/frontend && npm install && npm run dev
 ```
+
+---
+
+## Deployment
+
+| Service | Platform | Trigger |
+|---------|----------|---------|
+| API + worker | Railway | push to `main` |
+| Frontend | Vercel | push to `main` |
+| vLLM inference | RunPod Serverless | always-on endpoint |
+| Pi edge daemon | systemd on Pi 5 | manual deploy via `scripts/` |
+
+Pi deployment: SSH into Pi → SCP updated files from `pi_edge/` → `sudo systemctl restart medibox-camera`.
 
 ---
 
 ## Compliance
 
-- Tunisian **Loi n°2004-63** (personal data protection) — not HIPAA
-- Patient and doctor names encrypted at rest via Cloud KMS (DD-008)
+- Tunisian **Loi n°2004-63** (personal data protection)
+- Patient/doctor names encrypted at rest (Fernet, key in Railway env)
 - PII never logged in plaintext
-- All admin actions audited to append-only `audit_log` table
-- Admin access requires Firebase JWT `admin` claim AND `admin_role_grants` DB row (DD-013)
-- TLS 1.3 enforced (Cloud Run default), HSTS via response headers
-- Secrets managed via Google Secret Manager — never in container images or `.env` files in production
+- All admin actions written to append-only `audit_log` table
+- Admin access requires Firebase JWT `admin` claim AND `admin_role_grants` DB row
+- TLS enforced end-to-end; secrets only in Railway/RunPod env vars
 
 ---
 
-## Legal
+## Known Limitations
 
-See [TERMS_OF_SERVICE.md](TERMS_OF_SERVICE.md) and [LIABILITY.md](LIABILITY.md).
+- **Single-process Railway**: API and arq worker run in the same process. If the worker crashes, the API is affected. Migration path: split into two Railway services.
+- **RunPod cold starts**: Serverless workers scale to zero. First scan after idle costs 60–120s. Warmup endpoint (`POST /v1/warmup`) is called on camera page open to front-load this.
+- **No offline fallback**: Pi requires Railway connectivity to submit jobs.
 
-All AI-generated prescription extractions require pharmacist review before any clinical action.
+---
+
+All AI-generated extraction results require pharmacist verification before any clinical action.

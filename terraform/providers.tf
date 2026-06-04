@@ -27,11 +27,10 @@ terraform {
     }
 
     # RunPod Serverless — https://registry.terraform.io/providers/runpod-io/runpod
-    # Uncomment when RunPod credentials are available
-    # runpod = {
-    #   source  = "runpod-io/runpod"
-    #   version = "~> 1.3"
-    # }
+    runpod = {
+      source  = "runpod-io/runpod"
+      version = "~> 1.3"
+    }
   }
 
   # Remote state — store in R2 (S3-compatible) so it's never local
@@ -70,6 +69,6 @@ provider "github" {
   owner = var.github_owner
 }
 
-# provider "runpod" {
-#   api_key = var.runpod_api_key
-# }
+provider "runpod" {
+  api_key = var.runpod_api_key
+}

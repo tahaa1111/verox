@@ -4,6 +4,13 @@
 __pycache__/
 *.py[cod]
 *.pyo
+
+# GCP-era artifacts (kept locally, not tracked)
+archive/
+cloudbuild*.yaml
+cloud-sql-proxy*
+run_vllm_deploy.sh
+vllm_deploy.log
 .venv/
 venv/
 env/

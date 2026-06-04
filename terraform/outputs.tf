@@ -48,16 +48,25 @@ output "cloudflare_account_id" {
   value       = var.cloudflare_account_id
 }
 
+# ── RunPod ────────────────────────────────────────────────────────────────────
+output "vllm_url" {
+  description = "RunPod OpenAI-compatible inference URL — set as VLLM_URL in Railway"
+  value       = "https://api.runpod.ai/v2/${runpod_endpoint.qwen.id}/openai"
+}
+
+output "runpod_endpoint_id" {
+  description = "RunPod serverless endpoint ID"
+  value       = runpod_endpoint.qwen.id
+}
+
 # ── Railway env var block (copy-paste into Railway dashboard) ─────────────────
 output "railway_api_env_vars" {
   description = "Paste this block into Railway medibox-api Variables → Raw Editor"
   sensitive   = true
   value = <<-EOT
 ENVIRONMENT=production
-DATABASE_URL_OVERRIDE=${neon_project.medibox.connection_string}
+DATABASE_URL=${neon_project.medibox.connection_string}
 REDIS_URL=rediss://default:${upstash_redis_database.medibox.password}@${upstash_redis_database.medibox.endpoint}:${upstash_redis_database.medibox.port}
-CELERY_BROKER_URL=rediss://default:${upstash_redis_database.medibox.password}@${upstash_redis_database.medibox.endpoint}:${upstash_redis_database.medibox.port}
-CELERY_RESULT_BACKEND=rediss://default:${upstash_redis_database.medibox.password}@${upstash_redis_database.medibox.endpoint}:${upstash_redis_database.medibox.port}
 PII_ENCRYPTION_KEY=${var.pii_encryption_key}
 R2_ENDPOINT=https://${var.cloudflare_account_id}.eu.r2.cloudflarestorage.com
 R2_ACCESS_KEY_ID=${cloudflare_api_token.r2_medibox.value}
@@ -65,7 +74,9 @@ R2_BUCKET=medibox-crops
 FIREBASE_PROJECT_ID=verox-4dc3f
 METRICS_SECRET=${var.metrics_secret}
 CAMERA_SECRET=${var.camera_secret}
+VLLM_URL=https://api.runpod.ai/v2/${runpod_endpoint.qwen.id}/openai
+VLLM_API_KEY=${var.runpod_api_key}
+VLLM_MODEL=qwen/qwen2.5-vl-7b-instruct-awq
 SENTRY_DSN=${var.sentry_dsn}
-RAILWAY_DOCKERFILE_PATH=services/api/Dockerfile
   EOT
 }

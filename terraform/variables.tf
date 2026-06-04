@@ -74,12 +74,22 @@ variable "github_repo" {
   default     = "verox"
 }
 
-# ── RunPod (fill in when credentials available) ───────────────────────────────
+# ── RunPod ────────────────────────────────────────────────────────────────────
 variable "runpod_api_key" {
   description = "RunPod API key — https://www.runpod.io/console/user/settings"
   type        = string
   sensitive   = true
-  default     = ""  # set when RunPod endpoint is created
+}
+
+variable "runpod_template_id" {
+  description = "RunPod serverless template ID — Serverless > Manage > Templates in RunPod console"
+  type        = string
+}
+
+variable "runpod_network_volume_id" {
+  description = "RunPod network volume ID for persistent model weights (optional — avoids 12GB download on cold start)"
+  type        = string
+  default     = ""
 }
 
 # ── PII encryption keys (passed through to GitHub secrets) ────────────────────
