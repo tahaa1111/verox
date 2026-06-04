@@ -40,8 +40,9 @@ class TestRepairAndParseJson:
 
 class TestCalibrateConfidence:
     def test_high_logprob_gives_high_confidence(self):
+        # weights: 0.25*logprob + 0.45*formulary + 0.20*completeness = 0.8425
         score = calibrate_confidence(logprob_conf=0.95, formulary_score=0.9, completeness=1.0)
-        assert score >= 0.85
+        assert score >= 0.80
 
     def test_low_logprob_gives_low_confidence(self):
         score = calibrate_confidence(logprob_conf=0.1, formulary_score=0.1, completeness=0.2)
@@ -52,9 +53,10 @@ class TestCalibrateConfidence:
         assert 0.0 <= score <= 1.0
 
     def test_weights_sum_correctly(self):
-        # 0.50*logprob + 0.35*formulary + 0.15*completeness
+        # 0.25*logprob + 0.45*formulary + 0.20*completeness = 0.90
+        # specialty weight (0.10) is applied in run_postprocessing, not here
         score = calibrate_confidence(logprob_conf=1.0, formulary_score=1.0, completeness=1.0)
-        assert abs(score - 1.0) < 0.001
+        assert abs(score - 0.90) < 0.001
 
 
 class TestNormalizeDate:
