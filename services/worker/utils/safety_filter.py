@@ -60,6 +60,14 @@ def validate_crop_image(image_base64: str, track_id: int = 0) -> bytes:
             f"track_id={track_id}: decoded image {len(raw)} bytes exceeds 2 MB limit"
         )
 
+    # Magic-byte MIME check — verify actual file header, not just PIL decode
+    _JPEG_MAGIC = b"\xff\xd8\xff"
+    _PNG_MAGIC  = b"\x89PNG\r\n\x1a\n"
+    if not (raw[:3] == _JPEG_MAGIC or raw[:8] == _PNG_MAGIC):
+        raise SafetyFilterError(
+            f"track_id={track_id}: unsupported image format (must be JPEG or PNG)"
+        )
+
     try:
         # PIL decompression bomb protection — raises DecompressionBombError if > Image.MAX_IMAGE_PIXELS
         Image.MAX_IMAGE_PIXELS = MAX_PIXELS

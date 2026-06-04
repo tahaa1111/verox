@@ -19,6 +19,7 @@ Command message (browser → relay → Pi):
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import defaultdict
 
 import structlog
@@ -27,11 +28,14 @@ from fastapi import WebSocket
 logger = structlog.get_logger(__name__)
 
 
+_MAX_FRAME_RATE = 15   # frames/second per device — prevents relay flood
+
 class CameraRelayManager:
     def __init__(self) -> None:
         self._pi: dict[str, WebSocket] = {}
         self._viewers: dict[str, set[WebSocket]] = defaultdict(set)
-        self._latest_frame: dict[str, str] = {}   # device_id → last base64 JPEG
+        self._latest_frame: dict[str, str] = {}       # device_id → last base64 JPEG
+        self._last_frame_ts: dict[str, float] = {}    # device_id → last relay timestamp
 
     # ── Pi connection ──────────────────────────────────────────────────────────
 
@@ -62,6 +66,12 @@ class CameraRelayManager:
     async def relay_frame(self, device_id: str, message: dict) -> None:
         if message.get("type") == "frame" and message.get("frame"):
             self._latest_frame[device_id] = message["frame"]
+            # Rate-cap: drop frames that arrive faster than _MAX_FRAME_RATE
+            now = time.monotonic()
+            min_interval = 1.0 / _MAX_FRAME_RATE
+            if now - self._last_frame_ts.get(device_id, 0) < min_interval:
+                return
+            self._last_frame_ts[device_id] = now
         viewers = list(self._viewers.get(device_id, []))
         if not viewers:
             return
