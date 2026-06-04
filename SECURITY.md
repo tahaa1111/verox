@@ -16,25 +16,24 @@ All API endpoints except `/v1/healthz` and `/v1/readyz` require a valid Firebase
 Authorization: Bearer <firebase_id_token>
 ```
 
-The API verifies the token using Firebase Admin SDK via Application Default Credentials (ADC) in Cloud Run. Token expiry, signature, and project ID are all verified.
+The API verifies the token using Firebase Admin SDK. Token expiry, signature, and project ID are all verified on every request.
 
-### Admin Authorization (Dual Factor — DD-013)
+### Admin Authorization (Dual Factor)
 
 Admin endpoints (`/v1/admin/**`) require **both**:
 
-1. `admin: true` claim in the verified Firebase JWT
+1. `admin: true` custom claim in the verified Firebase JWT
 2. A non-revoked row in the `admin_role_grants` Postgres table (`revoked_at IS NULL`)
 
-This prevents a compromised Firebase console from granting admin access without a corresponding database grant. All admin actions are written to the append-only `audit_log` table.
+This ensures a compromised Firebase console alone cannot grant admin access. All admin actions are written to the append-only `audit_log` table.
 
-### Edge Device Authentication (WIF — DD-010)
+### Edge Device Authentication
 
-Raspberry Pi edge devices authenticate using:
+Pi edge devices authenticate using a **shared camera secret** (UUID) stored in:
+- Pi: `/etc/medibox/edge.toml` or `CAMERA_SECRET` env var (systemd EnvironmentFile)
+- API: `CAMERA_SECRET` Railway environment variable
 
-1. **Primary:** Workload Identity Federation (OIDC) — no long-lived keys
-2. **Fallback:** JSON service account key (if WIF unavailable on the device network)
-
-The edge service account has `roles/run.invoker` only — it cannot call Vertex AI directly. All inference goes through the Cloud Run API → Celery worker → Vertex AI.
+The secret is used to authenticate WebSocket connections from the Pi to the camera relay endpoint.
 
 ---
 
@@ -42,32 +41,34 @@ The edge service account has `roles/run.invoker` only — it cannot call Vertex 
 
 ### Data in Transit
 
-- TLS 1.3 enforced by default on Cloud Run
-- HSTS header: `Strict-Transport-Security: max-age=63072000; includeSubDomains`
-- `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` on all responses
+- TLS enforced end-to-end (Railway + Vercel + RunPod all terminate TLS)
+- `HSTS`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` on all API responses
 
-### Data at Rest — PII (DD-008)
+### Data at Rest — PII
 
-Patient names and doctor names are **encrypted at rest** using Cloud KMS envelope encryption:
+Patient names and doctor names are **encrypted at rest** using **MultiFernet** (Fernet symmetric encryption):
 
-1. A per-job **Data Encryption Key (DEK)** is generated (AES-256-GCM via Fernet)
-2. The DEK is encrypted by the **Key Encryption Key (KEK)** stored in Cloud KMS
-3. Only the encrypted DEK is stored alongside the ciphertext in Postgres
-4. Decryption happens only at display time (~50ms KMS API call)
-5. The plaintext DEK **never persists** anywhere
+- Encryption key stored in Railway environment variable `PII_ENCRYPTION_KEY` (never in code)
+- `PII_ENCRYPTION_KEY_PREV` supported for zero-downtime key rotation
+- Stored format: `v2:multi::<fernet_token>`
+- Decryption only at display time; plaintext never persists in logs or DB columns
+- **PII is never logged** — all log events omit or redact patient/doctor names
 
-Stored format: `kms::<encrypted_value_b64>::<encrypted_dek_b64>`
+### Secrets Management
 
-**PII is never logged.** Log events use `patient_name: "[REDACTED]"` or omit the field entirely.
-
-### Secrets
-
-All secrets are stored in **Google Secret Manager** and loaded at Cloud Run startup via the service account's ADC. They are never:
-- Embedded in container images
-- Stored in `.env` files in production
+All secrets are stored in Railway environment variables. Never:
+- Hardcoded in source code
+- Committed to version control
 - Printed in logs
 
-Secrets include: DB password, Redis AUTH string, Firebase admin JSON, JWT signing key, KMS key name.
+| Secret | Where |
+|--------|-------|
+| `DATABASE_URL` | Railway |
+| `REDIS_URL` | Railway (Upstash) |
+| `PII_ENCRYPTION_KEY` | Railway |
+| `CAMERA_SECRET` | Railway + Pi `/etc/medibox/edge.toml` |
+| `VLLM_URL` / `VLLM_API_KEY` | Railway |
+| Firebase Admin JSON | Railway |
 
 ---
 
@@ -75,65 +76,45 @@ Secrets include: DB password, Redis AUTH string, Firebase admin JSON, JWT signin
 
 | Check | Location |
 |-------|----------|
-| Device ID format (`pi-XXXX`) | EdgePayload Pydantic schema |
+| Device ID format | EdgePayload Pydantic schema |
 | Session ID (UUID v4) | EdgePayload schema |
-| Timestamp clock skew (±5 min) | EdgePayload schema |
-| Max 30 crops per request | EdgePayload schema |
-| Max 2MB per crop, 20MB combined | EdgePayload + multipart handler |
-| JPEG/PNG magic bytes | Safety filter (worker-side) |
-| Image dimensions (max 4096×4096) | Safety filter + PIL limit |
-| PIL decompression bomb guard | `Image.MAX_IMAGE_PIXELS = 25_000_000` |
+| Max 9 crops per request | Enforced in submit router |
+| JPEG magic bytes + aspect ratio | Safety filter (worker-side) |
+| Black / blank image detection | Safety filter — returns error, not processed |
+| Image dimensions | PIL decompression bomb guard (`MAX_IMAGE_PIXELS`) |
 
 ---
 
 ## Audit Logging
 
-All admin actions are written to the `audit_log` Postgres table:
-
-```sql
-CREATE TABLE audit_log (
-    id BIGSERIAL PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    action TEXT NOT NULL,
-    resource_type TEXT,
-    resource_id TEXT,
-    details JSONB,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
--- App role has INSERT only — no UPDATE or DELETE
-REVOKE UPDATE, DELETE ON audit_log FROM medibox_app;
-```
+All admin actions are written to the append-only `audit_log` Postgres table. The application role has `INSERT` only — `UPDATE` and `DELETE` are revoked.
 
 Actions logged: admin login, maintenance mode toggle, model rollback, role grant/revoke.
-
-All Cloud Run access is also logged to Cloud Audit Logs automatically.
 
 ---
 
 ## Network Security
 
-- Cloud Run services are deployed with `--no-allow-unauthenticated` (API and Worker)
-- Frontend is public (`--allow-unauthenticated`) — serves only static HTML/JS
-- Cloud SQL accessible only via Cloud SQL Auth Proxy (Unix socket or TCP via VPC)
-- Memorystore Redis accessible only via Serverless VPC Connector (private IP)
-- Vertex AI endpoint accessible only from Cloud Run worker service account
-- No public IP on Cloud SQL
+- Railway API: public HTTPS, all endpoints require Firebase JWT (except `/healthz`)
+- RunPod: accessible only via `VLLM_API_KEY` bearer token, not public
+- Neon Postgres: connection string with credentials in Railway env only
+- Upstash Redis: TLS-only (`rediss://`), password in Railway env only
+- Pi → Railway: WebSocket over TLS, authenticated with `CAMERA_SECRET`
+
+---
+
+## Known Constraints
+
+| Constraint | Mitigation |
+|------------|------------|
+| Firebase console admin claim injection | `admin_role_grants` DB second factor |
+| RunPod cold start (60–120s) | Warmup endpoint called on camera page open |
+| Single-process Railway (API + worker) | Restart policy + Railway health checks |
+| Model hallucination | Disclaimer on every response, pharmacist review required |
 
 ---
 
 ## Responsible Disclosure
 
-To report a security vulnerability, contact the project maintainer directly.
+To report a security vulnerability, contact the maintainer directly.
 Do not open a public GitHub issue for security vulnerabilities.
-
----
-
-## Known Security Constraints
-
-| Constraint | Mitigation |
-|------------|------------|
-| Firebase console admin claim injection | `admin_role_grants` DB second factor (DD-013) |
-| T4 GPU cannot scale to zero (DD-001) | Pause script + budget alerts |
-| Cloud SQL connection pool ceiling (R-15) | max-instances=5, pool_size=2 |
-| WIF unavailable on restricted networks | JSON key fallback (DD-010) |
-| Model hallucination (clinical risk) | Disclaimer on every response, pharmacist review required |
