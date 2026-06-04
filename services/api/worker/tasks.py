@@ -165,6 +165,11 @@ async def run_pipeline(ctx: dict, job_id: str, payload: dict, prefix: str) -> di
                 await record_failure(redis_url)
                 raise
 
+            # Validate RunPod response shape before trusting it
+            if not isinstance(result, dict) or "raw_output" not in result:
+                raise ValueError(
+                    f"RunPod returned unexpected response shape: {str(result)[:200]}"
+                )
             all_raw_outputs.append({"result": result, "slots": grid.slots})
             await _ws_publish(redis_url, job_id, {
                 "event": "inference_progress", "job_id": job_id, "stage": "ocr",
