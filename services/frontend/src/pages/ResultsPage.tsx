@@ -17,7 +17,7 @@ import { pollJob, cancelJob } from "../api";
 import { ProgressBar } from "../components/ProgressBar";
 import { MedicationTable } from "../components/MedicationTable";
 import { ConfidenceBadge } from "../components/ConfidenceBadge";
-import type { PrescriptionResult, CropText } from "../types";
+import type { PrescriptionResult } from "../types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -51,72 +51,6 @@ function confLabel(v: number): string {
   return "Low";
 }
 
-// ---------------------------------------------------------------------------
-// CropTexts — the star of the show: per-YOLO-crop text + confidence
-// ---------------------------------------------------------------------------
-
-function CropTexts({ crops, overallConf }: { crops: CropText[]; overallConf: number }) {
-  const [expanded, setExpanded] = useState(true);
-  if (!crops || crops.length === 0) return null;
-
-  return (
-    <div className="space-y-3">
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="flex items-center justify-between w-full group"
-      >
-        <div className="flex items-center gap-2">
-          <h2 className="text-base font-semibold text-gray-900">Detected Text</h2>
-          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium border border-blue-100">
-            {crops.length} crop{crops.length !== 1 ? "s" : ""}
-          </span>
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${confColor(overallConf)}`}>
-            {confLabel(overallConf)} confidence
-          </span>
-        </div>
-        <svg
-          className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? "rotate-180" : ""}`}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-
-      {expanded && (
-        <div className="space-y-3">
-          {crops.map((crop, i) => (
-            <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-              {/* Crop header */}
-              <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Crop {crop.cell}
-                </span>
-                {/* YOLO confidence */}
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-gray-400">YOLO:</span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded font-mono font-medium border ${confColor(crop.yolo_confidence)}`}>
-                    {(crop.yolo_confidence * 100).toFixed(0)}%
-                  </span>
-                </div>
-                {/* Model read confidence */}
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-gray-400">Read:</span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded font-mono font-medium border ${confColor(crop.model_confidence)}`}>
-                    {(crop.model_confidence * 100).toFixed(0)}%
-                  </span>
-                </div>
-              </div>
-              {/* Detected text */}
-              <pre className="text-sm text-gray-800 font-mono whitespace-pre-wrap break-words leading-relaxed p-4">
-                {crop.text || <span className="text-gray-300 italic">No text detected in this region</span>}
-              </pre>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // PrescriptionDetails — Patient + Doctor + Medications in one unified section.
@@ -240,88 +174,6 @@ function PrescriptionDetails({
   );
 }
 
-// ---------------------------------------------------------------------------
-// RawTextLabelPanel — labeling only, shown below crop texts
-// ---------------------------------------------------------------------------
-
-const FIELD_PRESETS = [
-  "Patient Information",
-  "Doctor / Prescriber",
-  "Medication",
-  "Dosage & Instructions",
-  "Date / Reference",
-  "CNAM / Insurance",
-  "Additional Notes",
-  "Other",
-];
-
-function RawTextLabelPanel({ rawText }: { rawText: string }) {
-  const chunks = rawText
-    ? rawText.split(/\n{2,}/).map((c) => c.trim()).filter(Boolean)
-    : [];
-  const [labels, setLabels] = useState<Record<number, string>>({});
-  const [expanded, setExpanded] = useState(false);
-
-  if (chunks.length === 0) return null;
-
-  return (
-    <div className="space-y-3">
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="flex items-center justify-between w-full group"
-      >
-        <div className="flex items-center gap-2">
-          <h2 className="text-base font-semibold text-gray-800">Label Text Blocks</h2>
-          <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">
-            {chunks.length} block{chunks.length !== 1 ? "s" : ""}
-          </span>
-        </div>
-        <svg
-          className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? "rotate-180" : ""}`}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-
-      {expanded && (
-        <>
-          <p className="text-xs text-gray-500">
-            Assign headers to text blocks not captured in the structured fields.
-          </p>
-          <div className="space-y-3">
-            {chunks.map((chunk, i) => (
-              <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <select
-                    value={labels[i] ?? ""}
-                    onChange={(e) => setLabels((prev) => ({ ...prev, [i]: e.target.value }))}
-                    className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-600 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
-                  >
-                    <option value="">— assign header —</option>
-                    {FIELD_PRESETS.map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                  {labels[i] && (
-                    <span className="text-xs bg-brand-50 text-brand-700 px-2 py-0.5 rounded-full font-medium border border-brand-100">
-                      {labels[i]}
-                    </span>
-                  )}
-                  <span className="ml-auto text-xs text-gray-300">Block {i + 1}</span>
-                </div>
-                <pre className="text-sm text-gray-700 font-mono whitespace-pre-wrap break-words leading-relaxed bg-gray-50 rounded-lg p-3 border border-gray-100">
-                  {chunk}
-                </pre>
-              </div>
-            ))}
-          </div>
-          <p className="text-xs text-gray-400 pt-1">
-            ℹ️ Labels are local only — use <span className="font-medium text-gray-500">Submit Correction</span> to send to the system.
-          </p>
-        </>
-      )}
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Main page
