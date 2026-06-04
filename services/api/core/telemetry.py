@@ -37,7 +37,10 @@ _PII_ATTRS = frozenset({
 })
 
 
-class PiiScrubSpanProcessor:
+from opentelemetry.sdk.trace import SpanProcessor
+
+
+class PiiScrubSpanProcessor(SpanProcessor):
     """SpanProcessor that redacts PII attribute keys before export."""
 
     def on_start(self, span, parent_context=None):  # type: ignore[override]

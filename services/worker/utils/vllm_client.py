@@ -278,13 +278,13 @@ async def infer_grid_async(grid_b64: str, job_id: str, cell_count: int = 1,
 def infer_grid(
     grid_b64: str,
     job_id: str,
-    cell_count: int,
+    cell_count: int = 1,
     model_version: str = "",
     prompt_version: str = "v1",
     crop_slots: list | None = None,
 ) -> dict[str, Any]:
     t0 = time.perf_counter()
-    payload = _build_payload(grid_b64, cell_count, crop_slots)
+    payload = _build_payload([grid_b64], crop_slots)
     headers: dict[str, str] = {}
     if _VLLM_API_KEY:
         headers["Authorization"] = f"Bearer {_VLLM_API_KEY}"
