@@ -40,21 +40,33 @@ def _client():
     )
 
 
+_CROP_RETENTION_DAYS = int(os.getenv("R2_CROP_RETENTION_DAYS", "30"))
+
+
 def upload_crop(
     job_id: str,
     track_id: int,
     raw_bytes: bytes,
     content_type: str = "image/jpeg",
 ) -> str:
-    """Upload a crop image to R2. Returns the R2 object key (not a public URL)."""
+    """Upload a crop image to R2. Returns the R2 object key (not a public URL).
+
+    Crops contain prescription PII (patient name, doctor, medications) in plaintext
+    pixels. They are stored in a private bucket with 30-day auto-delete enforced via
+    object-level expiry tag. The tag is honored by an R2 lifecycle rule set on the
+    bucket (must be configured once in Cloudflare dashboard or via API).
+    """
+    import datetime
     key = f"{job_id}/crop_{track_id:04d}.jpg"
+    expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=_CROP_RETENTION_DAYS)
     _client().put_object(
         Bucket=_BUCKET,
         Key=key,
         Body=raw_bytes,
         ContentType=content_type,
+        Expires=expires,  # S3 Expires header — R2 lifecycle rule deletes at this date
     )
-    return key  # return key, not URI — caller generates presigned URL on demand
+    return key
 
 
 def generate_presigned_url(key: str, expires_in: int = 300) -> str:

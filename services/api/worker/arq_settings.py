@@ -2,12 +2,19 @@
 arq WorkerSettings — runs inside the FastAPI process (same event loop).
 
 Design choices:
-  max_jobs=1           Only one inference at a time (GPU serialises requests).
+  max_jobs=1           Single Railway process → single arq worker → one RunPod call
+                       in flight at a time. RunPod max_workers=1 matches this.
+                       (Setting RunPod max_workers>1 is useless here — burst capacity
+                       requires either multiple Railway processes or raising this to >1.)
   job_timeout=360      6 min — covers RunPod serverless cold start (60s) + inference.
-  health_check_interval=30  Reduces Redis polling to ~3 000 commands/day so
-                             we stay within Upstash free tier (10 000/day).
+  health_check_interval=30  Heartbeat to Redis.
+  poll_delay=2.0s      Each poll = 1 Upstash command. At 2.0s: ~1.3M cmds/month.
+                       This exceeds the Upstash 500K free tier — a paid plan or
+                       clinic-hours-only deployment is required. Set ARQ_POLL_DELAY
+                       env var to tune (e.g. 10.0s for ~390K/month under free tier,
+                       at the cost of up to 10s job pickup delay).
   keep_result=3600     Keep arq result key in Redis for 1 h (enough for WS).
-  retry_jobs=True      arq re-enqueues jobs that raise; task sets max_tries.
+  retry_jobs=True      arq re-enqueues on exception; task checks ctx["job_try"].
 """
 
 from __future__ import annotations
