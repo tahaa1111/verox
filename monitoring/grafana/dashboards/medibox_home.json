@@ -1,5 +1,5 @@
 {
-  "title": "MediBox — Unified Overview",
+  "title": "MediBox — Unified",
   "uid": "medibox-home",
   "schemaVersion": 38,
   "version": 1,
@@ -8,19 +8,6 @@
   "refresh": "30s",
   "time": {"from": "now-6h", "to": "now"},
   "graphTooltip": 1,
-  "links": [
-    {
-      "asDropdown": true,
-      "icon": "external link",
-      "includeVars": true,
-      "keepTime": true,
-      "tags": ["medibox"],
-      "targetBlank": false,
-      "title": "Drill-down Dashboards",
-      "tooltip": "Jump to focused dashboards",
-      "type": "dashboards"
-    }
-  ],
   "templating": {
     "list": [
       {
@@ -32,894 +19,376 @@
         "options": [],
         "query": "prometheus",
         "refresh": 1,
-        "regex": "",
         "type": "datasource",
         "label": "Data Source"
       }
     ]
   },
+
   "panels": [
-    {
-      "id": 1,
-      "type": "stat",
-      "title": "Active Pi Devices",
+
+    { "id": 1, "type": "stat", "title": "Active Pi Devices",
       "description": "Devices that pushed a camera frame in the last 30 s",
       "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "active_devices_total",
-          "legendFormat": "devices",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "red", "value": null},
-              {"color": "green", "value": 1}
-            ]
-          },
-          "unit": "short",
-          "noValue": "0"
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "textMode": "auto",
-        "wideLayout": true,
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
-      }
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "active_devices_total", "legendFormat": "devices", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}, "unit": "short", "noValue": "0"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
     },
-    {
-      "id": 2,
-      "type": "stat",
-      "title": "Jobs Completed Today",
-      "description": "Successful OCR jobs in the last 24 h",
+    { "id": 2, "type": "stat", "title": "Jobs Completed Today",
       "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(increase(ocr_jobs_total{status=\"completed\"}[24h]))",
-          "legendFormat": "completed",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{"color": "blue", "value": null}]
-          },
-          "unit": "short",
-          "noValue": "0"
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "textMode": "auto",
-        "wideLayout": true,
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
-      }
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(increase(ocr_jobs_total{status=\"completed\"}[24h]))", "legendFormat": "completed", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}, "unit": "short", "noValue": "0"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
     },
-    {
-      "id": 3,
-      "type": "stat",
-      "title": "Queue Depth",
-      "description": "OCR jobs currently waiting for a worker",
+    { "id": 3, "type": "stat", "title": "arq Queue Depth",
+      "description": "Jobs waiting for the Railway worker right now",
       "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "ocr_queue_depth",
-          "legendFormat": "queued",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 5},
-              {"color": "red", "value": 20}
-            ]
-          },
-          "unit": "short",
-          "noValue": "0"
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "textMode": "auto",
-        "wideLayout": true,
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
-      }
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "ocr_queue_depth", "legendFormat": "queued", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 20}]}, "unit": "short", "noValue": "0"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
     },
-    {
-      "id": 4,
-      "type": "stat",
-      "title": "API Error Rate",
-      "description": "Fraction of 5xx HTTP responses in the last 5 min",
+    { "id": 4, "type": "stat", "title": "API Error Rate",
       "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m])) * 100",
-          "legendFormat": "error %",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 1},
-              {"color": "red", "value": 5}
-            ]
-          },
-          "unit": "percent",
-          "decimals": 2,
-          "noValue": "0%"
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "textMode": "auto",
-        "wideLayout": true,
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
-      }
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m])) * 100", "legendFormat": "error %", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 5}]}, "unit": "percent", "decimals": 2, "noValue": "0%"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
     },
-    {
-      "id": 5,
-      "type": "stat",
-      "title": "API p95 Latency",
-      "description": "95th percentile HTTP request duration over last 5 min",
+    { "id": 5, "type": "stat", "title": "API p95 Latency",
       "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) * 1000",
-          "legendFormat": "p95",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 500},
-              {"color": "red", "value": 1500}
-            ]
-          },
-          "unit": "ms",
-          "decimals": 0,
-          "noValue": "-"
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "textMode": "auto",
-        "wideLayout": true,
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
-      }
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) * 1000", "legendFormat": "p95 ms", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 500}, {"color": "red", "value": 1500}]}, "unit": "ms", "decimals": 0, "noValue": "-"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
     },
-    {
-      "id": 6,
-      "type": "stat",
-      "title": "Auth Failures (1 h)",
-      "description": "Failed authentication attempts in the last hour — elevated values may indicate brute force",
+    { "id": 6, "type": "stat", "title": "Auth Failures (1 h)",
       "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(increase(auth_failures_total[1h]))",
-          "legendFormat": "failures",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 5},
-              {"color": "red", "value": 20}
-            ]
-          },
-          "unit": "short",
-          "noValue": "0"
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "textMode": "auto",
-        "wideLayout": true,
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
-      }
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(increase(auth_failures_total[1h]))", "legendFormat": "failures", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 20}]}, "unit": "short", "noValue": "0"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
     },
 
-    {
-      "id": 10,
-      "type": "row",
-      "title": "OCR Pipeline",
-      "gridPos": {"x": 0, "y": 4, "w": 24, "h": 1},
-      "collapsed": false,
-      "panels": []
-    },
-    {
-      "id": 11,
-      "type": "timeseries",
-      "title": "Job Throughput",
-      "description": "OCR jobs per second by status",
+    { "id": 10, "type": "row", "title": "OCR Pipeline", "gridPos": {"x": 0, "y": 4, "w": 24, "h": 1}, "collapsed": false, "panels": [] },
+
+    { "id": 11, "type": "timeseries", "title": "Job Throughput (by status)",
       "gridPos": {"x": 0, "y": 5, "w": 12, "h": 8},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(rate(ocr_jobs_total{status=\"completed\"}[5m]))",
-          "legendFormat": "completed/s",
-          "refId": "A"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(rate(ocr_jobs_total{status=\"queued\"}[5m]))",
-          "legendFormat": "queued/s",
-          "refId": "B"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(rate(ocr_jobs_total{status=\"failed\"}[5m]))",
-          "legendFormat": "failed/s",
-          "refId": "C"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(rate(ocr_jobs_total{status=\"cancelled\"}[5m]))",
-          "legendFormat": "cancelled/s",
-          "refId": "D"
-        }
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(ocr_jobs_total{status=\"completed\"}[5m]))", "legendFormat": "completed/s", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(ocr_jobs_total{status=\"queued\"}[5m]))", "legendFormat": "queued/s", "refId": "B"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(ocr_jobs_total{status=\"failed\"}[5m]))", "legendFormat": "failed/s", "refId": "C"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(ocr_jobs_total{status=\"cancelled\"}[5m]))", "legendFormat": "cancelled/s", "refId": "D"}
       ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {"lineWidth": 2, "fillOpacity": 10, "spanNulls": false, "drawStyle": "line", "gradientMode": "none"},
-          "unit": "reqps"
-        },
-        "overrides": [
-          {"matcher": {"id": "byName", "options": "failed/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
-          {"matcher": {"id": "byName", "options": "completed/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
-          {"matcher": {"id": "byName", "options": "queued/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]}
-        ]
-      },
-      "options": {
-        "tooltip": {"mode": "multi", "sort": "desc"},
-        "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"]}
-      }
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"}, "unit": "reqps"}, "overrides": [
+        {"matcher": {"id": "byName", "options": "completed/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+        {"matcher": {"id": "byName", "options": "failed/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+      ]},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"]}}
     },
-    {
-      "id": 12,
-      "type": "timeseries",
-      "title": "End-to-End Processing Time",
-      "description": "Total OCR pipeline duration percentiles (p50 / p95 / p99)",
+    { "id": 12, "type": "timeseries", "title": "End-to-End Processing Time",
       "gridPos": {"x": 12, "y": 5, "w": 12, "h": 8},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "histogram_quantile(0.50, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))",
-          "legendFormat": "p50",
-          "refId": "A"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "histogram_quantile(0.95, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))",
-          "legendFormat": "p95",
-          "refId": "B"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "histogram_quantile(0.99, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))",
-          "legendFormat": "p99",
-          "refId": "C"
-        }
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.50, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))", "legendFormat": "p50", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.95, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))", "legendFormat": "p95", "refId": "B"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.99, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))", "legendFormat": "p99", "refId": "C"}
       ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {"lineWidth": 2, "fillOpacity": 0, "spanNulls": false, "drawStyle": "line"},
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {"mode": "multi", "sort": "desc"},
-        "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"]}
-      }
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 2, "fillOpacity": 0, "drawStyle": "line"}, "unit": "s"}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"]}}
+    },
+    { "id": 13, "type": "timeseries", "title": "Queue Depth",
+      "gridPos": {"x": 0, "y": 13, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "ocr_queue_depth", "legendFormat": "depth", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": "blue"}, "custom": {"lineWidth": 2, "fillOpacity": 20, "drawStyle": "line"}, "unit": "short", "min": 0}, "overrides": []},
+      "options": {"tooltip": {"mode": "single"}, "legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    { "id": 14, "type": "timeseries", "title": "Inference Latency (Qwen / RunPod)",
+      "gridPos": {"x": 8, "y": 13, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.50, sum(rate(ocr_inference_latency_seconds_bucket[10m])) by (le))", "legendFormat": "p50", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.95, sum(rate(ocr_inference_latency_seconds_bucket[10m])) by (le))", "legendFormat": "p95", "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 2, "fillOpacity": 0, "drawStyle": "line"}, "unit": "s"}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    { "id": 15, "type": "timeseries", "title": "Human Corrections & Retries",
+      "gridPos": {"x": 16, "y": 13, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(corrections_total[10m]))", "legendFormat": "corrections/s", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(pipeline_retries_total[5m]))", "legendFormat": "retries/s", "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"}, "unit": "reqps"}, "overrides": [
+        {"matcher": {"id": "byName", "options": "retries/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]}
+      ]},
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}}
     },
 
-    {
-      "id": 20,
-      "type": "row",
-      "title": "Queue, Corrections & Inference",
-      "gridPos": {"x": 0, "y": 13, "w": 24, "h": 1},
-      "collapsed": false,
-      "panels": []
-    },
-    {
-      "id": 21,
-      "type": "timeseries",
-      "title": "Queue Depth",
-      "description": "Pending jobs in the inference queue over time",
-      "gridPos": {"x": 0, "y": 14, "w": 8, "h": 6},
+    { "id": 20, "type": "row", "title": "API Traffic", "gridPos": {"x": 0, "y": 19, "w": 24, "h": 1}, "collapsed": false, "panels": [] },
+
+    { "id": 21, "type": "timeseries", "title": "HTTP Request Rate (by status class)",
+      "gridPos": {"x": 0, "y": 20, "w": 12, "h": 8},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "ocr_queue_depth",
-          "legendFormat": "depth",
-          "refId": "A"
-        }
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(http_requests_total{status_code=~\"2..\"}[1m]))", "legendFormat": "2xx", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(http_requests_total{status_code=~\"4..\"}[1m]))", "legendFormat": "4xx", "refId": "B"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[1m]))", "legendFormat": "5xx", "refId": "C"}
       ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "fixed", "fixedColor": "blue"},
-          "custom": {"lineWidth": 2, "fillOpacity": 20, "drawStyle": "line"},
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 5},
-              {"color": "red", "value": 20}
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {"mode": "single"},
-        "legend": {"displayMode": "list", "placement": "bottom"}
-      }
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"}, "unit": "reqps"}, "overrides": [
+        {"matcher": {"id": "byName", "options": "2xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+        {"matcher": {"id": "byName", "options": "4xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]},
+        {"matcher": {"id": "byName", "options": "5xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+      ]},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean"]}}
     },
-    {
-      "id": 22,
-      "type": "timeseries",
-      "title": "Human Corrections",
-      "description": "Pharmacist manual corrections (feed model retraining)",
-      "gridPos": {"x": 8, "y": 14, "w": 8, "h": 6},
+    { "id": 22, "type": "timeseries", "title": "Latency Percentiles (p50 / p95 / p99)",
+      "gridPos": {"x": 12, "y": 20, "w": 12, "h": 8},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(rate(corrections_total[10m]))",
-          "legendFormat": "corrections/s",
-          "refId": "A"
-        }
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95", "refId": "B"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p99", "refId": "C"}
       ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "fixed", "fixedColor": "orange"},
-          "custom": {"lineWidth": 2, "fillOpacity": 15, "drawStyle": "line"},
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {"mode": "single"},
-        "legend": {"displayMode": "list", "placement": "bottom"}
-      }
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 2, "fillOpacity": 0, "drawStyle": "line"}, "unit": "s"}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"]}}
     },
-    {
-      "id": 23,
-      "type": "timeseries",
-      "title": "Inference Latency (Qwen/vLLM)",
-      "description": "Vertex AI / vLLM inference latency per grid",
-      "gridPos": {"x": 16, "y": 14, "w": 8, "h": 6},
+    { "id": 23, "type": "timeseries", "title": "Latency by Endpoint (p95)",
+      "gridPos": {"x": 0, "y": 28, "w": 24, "h": 7},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "histogram_quantile(0.50, sum(rate(ocr_inference_latency_seconds_bucket[10m])) by (le))",
-          "legendFormat": "p50",
-          "refId": "A"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "histogram_quantile(0.95, sum(rate(ocr_inference_latency_seconds_bucket[10m])) by (le))",
-          "legendFormat": "p95",
-          "refId": "B"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {"lineWidth": 2, "fillOpacity": 0, "drawStyle": "line"},
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {"mode": "multi"},
-        "legend": {"displayMode": "list", "placement": "bottom"}
-      }
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, endpoint))", "legendFormat": "{{endpoint}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 2, "fillOpacity": 0, "drawStyle": "line"}, "unit": "s"}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}}
     },
 
-    {
-      "id": 30,
-      "type": "row",
-      "title": "API Traffic & Security",
-      "gridPos": {"x": 0, "y": 20, "w": 24, "h": 1},
-      "collapsed": false,
-      "panels": []
-    },
-    {
-      "id": 31,
-      "type": "timeseries",
-      "title": "HTTP Request Rate by Status",
-      "description": "Requests per second grouped by HTTP status class",
-      "gridPos": {"x": 0, "y": 21, "w": 12, "h": 8},
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(rate(http_requests_total{status_code=~\"2..\"}[1m]))",
-          "legendFormat": "2xx",
-          "refId": "A"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(rate(http_requests_total{status_code=~\"4..\"}[1m]))",
-          "legendFormat": "4xx",
-          "refId": "B"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[1m]))",
-          "legendFormat": "5xx",
-          "refId": "C"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"},
-          "unit": "reqps"
-        },
-        "overrides": [
-          {"matcher": {"id": "byName", "options": "2xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
-          {"matcher": {"id": "byName", "options": "4xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]},
-          {"matcher": {"id": "byName", "options": "5xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
-        ]
-      },
-      "options": {
-        "tooltip": {"mode": "multi", "sort": "desc"},
-        "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean"]}
-      }
-    },
-    {
-      "id": 32,
-      "type": "timeseries",
-      "title": "Security Events",
-      "description": "Auth failures, rate limit hits, and suspicious requests over time",
-      "gridPos": {"x": 12, "y": 21, "w": 12, "h": 8},
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(rate(auth_failures_total[5m]))",
-          "legendFormat": "auth failures/s",
-          "refId": "A"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(rate(rate_limit_hits_total[5m]))",
-          "legendFormat": "rate limit hits/s",
-          "refId": "B"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(rate(suspicious_requests_total[5m]))",
-          "legendFormat": "suspicious/s",
-          "refId": "C"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"},
-          "unit": "reqps"
-        },
-        "overrides": [
-          {"matcher": {"id": "byName", "options": "auth failures/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
-          {"matcher": {"id": "byName", "options": "suspicious/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "dark-red"}}]}
-        ]
-      },
-      "options": {
-        "tooltip": {"mode": "multi", "sort": "desc"},
-        "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"]}
-      }
-    },
+    { "id": 30, "type": "row", "title": "Security", "gridPos": {"x": 0, "y": 35, "w": 24, "h": 1}, "collapsed": false, "panels": [] },
 
-    {
-      "id": 40,
-      "type": "row",
-      "title": "Edge Devices (Pi 5 — pi-0001)",
-      "gridPos": {"x": 0, "y": 29, "w": 24, "h": 1},
-      "collapsed": false,
-      "panels": []
-    },
-    {
-      "id": 41,
-      "type": "timeseries",
-      "title": "Active Devices",
-      "description": "Count of Pi devices actively sending frames",
-      "gridPos": {"x": 0, "y": 30, "w": 12, "h": 6},
+    { "id": 31, "type": "stat", "title": "Auth Failures (1 h)",
+      "gridPos": {"x": 0, "y": 36, "w": 6, "h": 4},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "active_devices_total",
-          "legendFormat": "active devices",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "fixed", "fixedColor": "green"},
-          "custom": {"lineWidth": 2, "fillOpacity": 20, "drawStyle": "line"},
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "red", "value": null},
-              {"color": "green", "value": 1}
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {"mode": "single"},
-        "legend": {"displayMode": "list", "placement": "bottom"}
-      }
-    },
-    {
-      "id": 42,
-      "type": "timeseries",
-      "title": "Camera Heartbeat Delay",
-      "description": "Delay between consecutive camera frame pushes per device",
-      "gridPos": {"x": 12, "y": 30, "w": 12, "h": 6},
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "histogram_quantile(0.50, sum(rate(device_heartbeat_delay_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p50",
-          "refId": "A"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "histogram_quantile(0.95, sum(rate(device_heartbeat_delay_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p95",
-          "refId": "B"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {"lineWidth": 2, "fillOpacity": 0, "drawStyle": "line"},
-          "unit": "s",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 5},
-              {"color": "red", "value": 15}
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {"mode": "multi"},
-        "legend": {"displayMode": "list", "placement": "bottom"}
-      }
-    },
-
-    {
-      "id": 50,
-      "type": "row",
-      "title": "Infrastructure",
-      "gridPos": {"x": 0, "y": 36, "w": 24, "h": 1},
-      "collapsed": false,
-      "panels": []
-    },
-    {
-      "id": 51,
-      "type": "timeseries",
-      "title": "Redis Command Rate",
-      "description": "Redis commands issued by the API/worker processes",
-      "gridPos": {"x": 0, "y": 37, "w": 8, "h": 6},
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(rate(redis_commands_total[1m]))",
-          "legendFormat": "cmds/s",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "fixed", "fixedColor": "purple"},
-          "custom": {"lineWidth": 1, "fillOpacity": 10, "drawStyle": "line"},
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {"mode": "single"},
-        "legend": {"displayMode": "list", "placement": "bottom"}
-      }
-    },
-    {
-      "id": 52,
-      "type": "timeseries",
-      "title": "Pipeline Retries",
-      "description": "arq job retries — sustained values indicate a persistent worker or RunPod error",
-      "gridPos": {"x": 8, "y": 37, "w": 8, "h": 6},
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(rate(pipeline_retries_total[5m]))",
-          "legendFormat": "retries/s",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "fixed", "fixedColor": "orange"},
-          "custom": {"lineWidth": 2, "fillOpacity": 15, "drawStyle": "bars"},
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {"mode": "single"},
-        "legend": {"displayMode": "list", "placement": "bottom"}
-      }
-    },
-    {
-      "id": 53,
-      "type": "timeseries",
-      "title": "Cold Starts (RunPod/vLLM)",
-      "description": "Worker cold-start events — each represents a GPU warm-up delay",
-      "gridPos": {"x": 16, "y": 37, "w": 8, "h": 6},
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(increase(runpod_cold_starts_total[1h]))",
-          "legendFormat": "cold starts/hr",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "fixed", "fixedColor": "semi-dark-red"},
-          "custom": {"lineWidth": 2, "fillOpacity": 15, "drawStyle": "bars"},
-          "unit": "short",
-          "noValue": "0"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {"mode": "single"},
-        "legend": {"displayMode": "list", "placement": "bottom"}
-      }
-    },
-
-    {
-      "id": 60,
-      "type": "row",
-      "title": "Platform — Neon + Upstash (requires exporters)",
-      "description": "Metrics from postgres_exporter and redis_exporter. Run docker-compose or deploy exporters on Railway.",
-      "gridPos": {"x": 0, "y": 43, "w": 24, "h": 1},
-      "collapsed": false,
-      "panels": []
-    },
-    {
-      "id": 61,
-      "type": "stat",
-      "title": "DB Connections",
-      "gridPos": {"x": 0, "y": 44, "w": 4, "h": 4},
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(pg_stat_database_numbackends{datname!~\"template.*|postgres\"})",
-          "legendFormat": "connections",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 50}, {"color": "red", "value": 90}]},
-          "unit": "short",
-          "noValue": "—"
-        },
-        "overrides": []
-      },
-      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
-    },
-    {
-      "id": 62,
-      "type": "stat",
-      "title": "DB Cache Hit Rate",
-      "gridPos": {"x": 4, "y": 44, "w": 4, "h": 4},
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(pg_stat_database_blks_hit_total{datname!~\"template.*|postgres\"}) / (sum(pg_stat_database_blks_hit_total{datname!~\"template.*|postgres\"}) + sum(pg_stat_database_blks_read_total{datname!~\"template.*|postgres\"})) * 100",
-          "legendFormat": "hit %",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 90}, {"color": "green", "value": 95}]},
-          "unit": "percent",
-          "decimals": 1,
-          "noValue": "—"
-        },
-        "overrides": []
-      },
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(increase(auth_failures_total[1h]))", "legendFormat": "failures", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 20}]}, "unit": "short", "noValue": "0"}, "overrides": []},
       "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
     },
-    {
-      "id": 63,
-      "type": "stat",
-      "title": "arq Queue Depth",
-      "description": "Redis ZCARD of arq:queue — from redis_exporter check-keys",
-      "gridPos": {"x": 8, "y": 44, "w": 4, "h": 4},
+    { "id": 32, "type": "stat", "title": "Rate Limit Hits (1 h)",
+      "gridPos": {"x": 6, "y": 36, "w": 6, "h": 4},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "redis_key_size{key=\"arq:queue\"}",
-          "legendFormat": "jobs",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 20}]},
-          "unit": "short",
-          "noValue": "—"
-        },
-        "overrides": []
-      },
-      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
-    },
-    {
-      "id": 64,
-      "type": "stat",
-      "title": "Redis Memory",
-      "description": "Upstash free tier = 256MB",
-      "gridPos": {"x": 12, "y": 44, "w": 4, "h": 4},
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "redis_memory_used_bytes",
-          "legendFormat": "used",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 200000000}, {"color": "red", "value": 245000000}]},
-          "unit": "bytes",
-          "noValue": "—"
-        },
-        "overrides": []
-      },
-      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
-    },
-    {
-      "id": 65,
-      "type": "stat",
-      "title": "Redis Clients",
-      "gridPos": {"x": 16, "y": 44, "w": 4, "h": 4},
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "redis_connected_clients",
-          "legendFormat": "clients",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 20}]},
-          "unit": "short",
-          "noValue": "—"
-        },
-        "overrides": []
-      },
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(increase(rate_limit_hits_total[1h]))", "legendFormat": "hits", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 10}, {"color": "red", "value": 50}]}, "unit": "short", "noValue": "0"}, "overrides": []},
       "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
     },
-    {
-      "id": 66,
-      "type": "stat",
-      "title": "DB Deadlocks (1 h)",
-      "gridPos": {"x": 20, "y": 44, "w": 4, "h": 4},
+    { "id": 33, "type": "stat", "title": "Brute Force Events (1 h)",
+      "gridPos": {"x": 12, "y": 36, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(increase(suspicious_requests_total{type=\"brute_force\"}[1h]))", "legendFormat": "events", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}, "unit": "short", "noValue": "0"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    { "id": 34, "type": "stat", "title": "Blocked IP Attempts (1 h)",
+      "gridPos": {"x": 18, "y": 36, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(increase(suspicious_requests_total{type=\"blocked_ip_attempt\"}[1h]))", "legendFormat": "attempts", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 20}]}, "unit": "short", "noValue": "0"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    { "id": 35, "type": "timeseries", "title": "Auth Failures by Reason",
+      "gridPos": {"x": 0, "y": 40, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(auth_failures_total[5m])) by (reason)", "legendFormat": "{{reason}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"}, "unit": "reqps"}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}}
+    },
+    { "id": 36, "type": "timeseries", "title": "Rate Limit Hits by Layer",
+      "description": "Layers: ip | user | device | burst",
+      "gridPos": {"x": 12, "y": 40, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(rate_limit_hits_total[5m])) by (layer)", "legendFormat": "{{layer}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"}, "unit": "reqps"}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"]}}
+    },
+    { "id": 37, "type": "timeseries", "title": "Suspicious Activity Timeline",
+      "gridPos": {"x": 0, "y": 48, "w": 24, "h": 7},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(increase(pg_stat_database_deadlocks_total{datname!~\"template.*|postgres\"}[1h]))",
-          "legendFormat": "deadlocks",
-          "refId": "A"
-        }
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(suspicious_requests_total{type=\"brute_force\"}[5m]))", "legendFormat": "brute force", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(suspicious_requests_total{type=\"blocked_ip_attempt\"}[5m]))", "legendFormat": "blocked IP attempts", "refId": "B"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(auth_failures_total[5m]))", "legendFormat": "auth failures", "refId": "C"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(rate_limit_hits_total[5m]))", "legendFormat": "rate limit hits", "refId": "D"}
       ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]},
-          "unit": "short",
-          "noValue": "0"
-        },
-        "overrides": []
-      },
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 2, "fillOpacity": 8, "drawStyle": "line"}, "unit": "reqps"}, "overrides": [
+        {"matcher": {"id": "byName", "options": "brute force"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "dark-red"}}]},
+        {"matcher": {"id": "byName", "options": "auth failures"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+      ]},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"]}}
+    },
+
+    { "id": 40, "type": "row", "title": "Edge Devices (Pi 5 — pi-0001)", "gridPos": {"x": 0, "y": 55, "w": 24, "h": 1}, "collapsed": false, "panels": [] },
+
+    { "id": 41, "type": "timeseries", "title": "Active Devices Over Time",
+      "gridPos": {"x": 0, "y": 56, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "active_devices_total", "legendFormat": "active devices", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": "green"}, "custom": {"lineWidth": 2, "fillOpacity": 20, "drawStyle": "line"}, "unit": "short", "min": 0}, "overrides": []},
+      "options": {"tooltip": {"mode": "single"}, "legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    { "id": 42, "type": "timeseries", "title": "Camera Heartbeat Delay (p50 / p95)",
+      "gridPos": {"x": 8, "y": 56, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.50, sum(rate(device_heartbeat_delay_seconds_bucket[5m])) by (le))", "legendFormat": "p50", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.95, sum(rate(device_heartbeat_delay_seconds_bucket[5m])) by (le))", "legendFormat": "p95", "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 2, "fillOpacity": 0, "drawStyle": "line"}, "unit": "s"}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    { "id": 43, "type": "timeseries", "title": "Submissions (queued vs completed)",
+      "gridPos": {"x": 16, "y": 56, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(ocr_jobs_total{status=\"queued\"}[5m]))", "legendFormat": "queued/s", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(ocr_jobs_total{status=\"completed\"}[5m]))", "legendFormat": "completed/s", "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"}, "unit": "reqps"}, "overrides": [
+        {"matcher": {"id": "byName", "options": "completed/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+        {"matcher": {"id": "byName", "options": "queued/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]}
+      ]},
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+
+    { "id": 50, "type": "row", "title": "Platform — Neon PostgreSQL", "gridPos": {"x": 0, "y": 62, "w": 24, "h": 1}, "collapsed": false, "panels": [] },
+
+    { "id": 51, "type": "stat", "title": "Postgres Up",
+      "gridPos": {"x": 0, "y": 63, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "pg_up", "legendFormat": "up", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}, "mappings": [{"type": "value", "options": {"0": {"text": "DOWN"}, "1": {"text": "UP"}}}], "unit": "short"}, "overrides": []},
       "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    { "id": 52, "type": "stat", "title": "Active Connections",
+      "gridPos": {"x": 4, "y": 63, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(pg_stat_database_numbackends{datname!~\"template.*|postgres\"})", "legendFormat": "connections", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 50}, {"color": "red", "value": 90}]}, "unit": "short", "noValue": "—"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    { "id": 53, "type": "stat", "title": "Cache Hit Rate",
+      "gridPos": {"x": 8, "y": 63, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(pg_stat_database_blks_hit_total{datname!~\"template.*|postgres\"}) / (sum(pg_stat_database_blks_hit_total{datname!~\"template.*|postgres\"}) + sum(pg_stat_database_blks_read_total{datname!~\"template.*|postgres\"})) * 100", "legendFormat": "hit %", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 90}, {"color": "green", "value": 95}]}, "unit": "percent", "decimals": 1, "noValue": "—"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    { "id": 54, "type": "stat", "title": "Transaction Rate",
+      "gridPos": {"x": 12, "y": 63, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(pg_stat_database_xact_commit_total{datname!~\"template.*|postgres\"}[5m]))", "legendFormat": "txn/s", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}, "unit": "reqps", "noValue": "—"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    { "id": 55, "type": "stat", "title": "Deadlocks (1 h)",
+      "gridPos": {"x": 16, "y": 63, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(increase(pg_stat_database_deadlocks_total{datname!~\"template.*|postgres\"}[1h]))", "legendFormat": "deadlocks", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}, "unit": "short", "noValue": "0"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    { "id": 56, "type": "stat", "title": "Rollbacks (1 h)",
+      "gridPos": {"x": 20, "y": 63, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(increase(pg_stat_database_xact_rollback_total{datname!~\"template.*|postgres\"}[1h]))", "legendFormat": "rollbacks", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 20}]}, "unit": "short", "noValue": "0"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    { "id": 57, "type": "timeseries", "title": "DB Connections Over Time",
+      "gridPos": {"x": 0, "y": 67, "w": 12, "h": 7},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "pg_stat_database_numbackends{datname!~\"template.*|postgres\"}", "legendFormat": "{{datname}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"}, "unit": "short", "min": 0}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    { "id": 58, "type": "timeseries", "title": "DB Row Operations (DML Rate)",
+      "gridPos": {"x": 12, "y": 67, "w": 12, "h": 7},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(pg_stat_database_tup_inserted_total{datname!~\"template.*|postgres\"}[5m]))", "legendFormat": "inserts/s", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(pg_stat_database_tup_updated_total{datname!~\"template.*|postgres\"}[5m]))", "legendFormat": "updates/s", "refId": "B"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(rate(pg_stat_database_tup_deleted_total{datname!~\"template.*|postgres\"}[5m]))", "legendFormat": "deletes/s", "refId": "C"}
+      ],
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 2, "fillOpacity": 5, "drawStyle": "line"}, "unit": "reqps"}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+
+    { "id": 60, "type": "row", "title": "Platform — Upstash Redis & arq Queue", "gridPos": {"x": 0, "y": 74, "w": 24, "h": 1}, "collapsed": false, "panels": [] },
+
+    { "id": 61, "type": "stat", "title": "Redis Up",
+      "gridPos": {"x": 0, "y": 75, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "redis_up", "legendFormat": "up", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}, "mappings": [{"type": "value", "options": {"0": {"text": "DOWN"}, "1": {"text": "UP"}}}], "unit": "short"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    { "id": 62, "type": "stat", "title": "arq Queue Depth (Redis ZCARD)",
+      "description": "From redis_exporter check-keys — no app code needed",
+      "gridPos": {"x": 4, "y": 75, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "redis_key_size{key=\"arq:queue\"}", "legendFormat": "jobs", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 20}]}, "unit": "short", "noValue": "—"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    { "id": 63, "type": "stat", "title": "Memory Used",
+      "description": "Free tier cap: 256 MB",
+      "gridPos": {"x": 8, "y": 75, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "redis_memory_used_bytes", "legendFormat": "used", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 200000000}, {"color": "red", "value": 245000000}]}, "unit": "bytes", "noValue": "—"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    { "id": 64, "type": "stat", "title": "Connected Clients",
+      "gridPos": {"x": 12, "y": 75, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "redis_connected_clients", "legendFormat": "clients", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 20}]}, "unit": "short", "noValue": "—"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    { "id": 65, "type": "stat", "title": "Keyspace Hit Rate",
+      "gridPos": {"x": 16, "y": 75, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total) * 100", "legendFormat": "hit %", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 70}, {"color": "green", "value": 90}]}, "unit": "percent", "decimals": 1, "noValue": "—"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    { "id": 66, "type": "stat", "title": "Total Keys",
+      "gridPos": {"x": 20, "y": 75, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum(redis_db_keys)", "legendFormat": "keys", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}, "unit": "short", "noValue": "0"}, "overrides": []},
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    { "id": 67, "type": "timeseries", "title": "arq Queue Depth Over Time",
+      "description": "arq:queue sorted set size — jobs waiting to be picked up by the Railway worker",
+      "gridPos": {"x": 0, "y": 79, "w": 12, "h": 7},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "redis_key_size{key=\"arq:queue\"}", "legendFormat": "arq queue depth", "refId": "A"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": "blue"}, "custom": {"lineWidth": 2, "fillOpacity": 20, "drawStyle": "line"}, "unit": "short", "min": 0}, "overrides": []},
+      "options": {"tooltip": {"mode": "single"}, "legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    { "id": 68, "type": "timeseries", "title": "Redis Memory & Command Rate",
+      "gridPos": {"x": 12, "y": 79, "w": 12, "h": 7},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "redis_memory_used_bytes", "legendFormat": "memory used", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "rate(redis_commands_processed_total[1m]) * 1000", "legendFormat": "cmds/s (×1000 for scale)", "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 2, "fillOpacity": 8, "drawStyle": "line"}, "unit": "bytes"}, "overrides": [
+        {"matcher": {"id": "byName", "options": "cmds/s (×1000 for scale)"}, "properties": [{"id": "custom.axisPlacement", "value": "right"}, {"id": "unit", "value": "ops"}, {"id": "color", "value": {"mode": "fixed", "fixedColor": "purple"}}]}
+      ]},
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}}
     }
+
   ]
 }
