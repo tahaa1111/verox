@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import uuid
 import time
 from datetime import datetime, timezone
 from typing import Any
