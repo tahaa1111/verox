@@ -133,4 +133,5 @@ jobs:
       - name: Deploy API
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
         run: railway up --service medibox-api --environment production --detach
