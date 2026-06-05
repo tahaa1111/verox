@@ -1,0 +1,810 @@
+{
+  "title": "Medibox — Platform (Neon + Upstash + arq)",
+  "uid": "medibox-platform",
+  "schemaVersion": 38,
+  "version": 1,
+  "tags": ["medibox"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "graphTooltip": 1,
+  "description": "Platform-level metrics from Neon Postgres and Upstash Redis via postgres_exporter and redis_exporter. Requires the exporters to be running (docker-compose or Railway services).",
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource",
+        "label": "Data Source"
+      }
+    ]
+  },
+  "panels": [
+
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Neon PostgreSQL",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Postgres Up",
+      "description": "1 = postgres_exporter can reach Neon",
+      "gridPos": {"x": 0, "y": 1, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "pg_up",
+          "legendFormat": "up",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          },
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}
+          ],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Active DB Connections",
+      "description": "Current open connections to the medibox database",
+      "gridPos": {"x": 4, "y": 1, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(pg_stat_database_numbackends{datname!~\"template.*|postgres\"})",
+          "legendFormat": "connections",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 50},
+              {"color": "red", "value": 90}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Cache Hit Rate",
+      "description": "Buffer cache hit rate — should stay above 95%. Low values mean Neon is reading from disk.",
+      "gridPos": {"x": 8, "y": 1, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(pg_stat_database_blks_hit_total{datname!~\"template.*|postgres\"}) / (sum(pg_stat_database_blks_hit_total{datname!~\"template.*|postgres\"}) + sum(pg_stat_database_blks_read_total{datname!~\"template.*|postgres\"})) * 100",
+          "legendFormat": "hit rate %",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 90},
+              {"color": "green", "value": 95}
+            ]
+          },
+          "unit": "percent",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Transaction Rate",
+      "description": "Committed transactions per second across all application databases",
+      "gridPos": {"x": 12, "y": 1, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(pg_stat_database_xact_commit_total{datname!~\"template.*|postgres\"}[5m]))",
+          "legendFormat": "txn/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
+          "unit": "reqps",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Deadlocks (1 h)",
+      "description": "Deadlocks are a sign of transaction contention. Should be 0 in normal operation.",
+      "gridPos": {"x": 16, "y": 1, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(increase(pg_stat_database_deadlocks_total{datname!~\"template.*|postgres\"}[1h]))",
+          "legendFormat": "deadlocks",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Rollbacks (1 h)",
+      "description": "Transaction rollbacks. Non-zero values indicate application errors or conflicts.",
+      "gridPos": {"x": 20, "y": 1, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(increase(pg_stat_database_xact_rollback_total{datname!~\"template.*|postgres\"}[1h]))",
+          "legendFormat": "rollbacks",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 20}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Active Connections Over Time",
+      "description": "Neon Postgres open connections per database",
+      "gridPos": {"x": 0, "y": 5, "w": 12, "h": 7},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "pg_stat_database_numbackends{datname!~\"template.*|postgres\"}",
+          "legendFormat": "{{datname}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"},
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "desc"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Transaction Rate",
+      "description": "Committed and rolled-back transactions per second",
+      "gridPos": {"x": 12, "y": 5, "w": 12, "h": 7},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(pg_stat_database_xact_commit_total{datname!~\"template.*|postgres\"}[5m]))",
+          "legendFormat": "commits/s",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(pg_stat_database_xact_rollback_total{datname!~\"template.*|postgres\"}[5m]))",
+          "legendFormat": "rollbacks/s",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 0, "drawStyle": "line"},
+          "unit": "reqps"
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "commits/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "rollbacks/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+        ]
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Row Operations (DML Rate)",
+      "description": "Inserts, updates, and deletes per second — reflects actual app write load",
+      "gridPos": {"x": 0, "y": 12, "w": 12, "h": 7},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(pg_stat_database_tup_inserted_total{datname!~\"template.*|postgres\"}[5m]))",
+          "legendFormat": "inserts/s",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(pg_stat_database_tup_updated_total{datname!~\"template.*|postgres\"}[5m]))",
+          "legendFormat": "updates/s",
+          "refId": "B"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(pg_stat_database_tup_deleted_total{datname!~\"template.*|postgres\"}[5m]))",
+          "legendFormat": "deletes/s",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 5, "drawStyle": "line"},
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Buffer Cache Hit Rate",
+      "description": "Keep above 95% — dips indicate table scans hitting Neon's storage layer",
+      "gridPos": {"x": 12, "y": 12, "w": 12, "h": 7},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(pg_stat_database_blks_hit_total{datname!~\"template.*|postgres\"}[5m])) / (sum(rate(pg_stat_database_blks_hit_total{datname!~\"template.*|postgres\"}[5m])) + sum(rate(pg_stat_database_blks_read_total{datname!~\"template.*|postgres\"}[5m]))) * 100",
+          "legendFormat": "cache hit %",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "green"},
+          "custom": {"lineWidth": 2, "fillOpacity": 15, "drawStyle": "line"},
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 90},
+              {"color": "green", "value": 95}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "single"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Upstash Redis & arq Queue",
+      "gridPos": {"x": 0, "y": 19, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Redis Up",
+      "description": "1 = redis_exporter can reach Upstash",
+      "gridPos": {"x": 0, "y": 20, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "redis_up",
+          "legendFormat": "up",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          },
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}
+          ],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "arq Queue Depth",
+      "description": "Number of jobs waiting in the arq:queue sorted set. Direct Redis ZCARD — no app code needed.",
+      "gridPos": {"x": 4, "y": 20, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "redis_key_size{key=\"arq:queue\"}",
+          "legendFormat": "jobs",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 20}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "Connected Clients",
+      "description": "Active connections to Upstash Redis from all Railway processes",
+      "gridPos": {"x": 8, "y": 20, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "redis_connected_clients",
+          "legendFormat": "clients",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 20},
+              {"color": "red", "value": 50}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+
+    {
+      "id": 24,
+      "type": "stat",
+      "title": "Memory Used",
+      "description": "Upstash Redis memory used. Free tier limit is 256MB.",
+      "gridPos": {"x": 12, "y": 20, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "redis_memory_used_bytes",
+          "legendFormat": "used",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 200000000},
+              {"color": "red", "value": 245000000}
+            ]
+          },
+          "unit": "bytes",
+          "noValue": "-"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+
+    {
+      "id": 25,
+      "type": "stat",
+      "title": "Keyspace Hit Rate",
+      "description": "Cache hit rate. Low values mean keys are missing/expired too often.",
+      "gridPos": {"x": 16, "y": 20, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total) * 100",
+          "legendFormat": "hit %",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 70},
+              {"color": "green", "value": 90}
+            ]
+          },
+          "unit": "percent",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+
+    {
+      "id": 26,
+      "type": "stat",
+      "title": "Total Keys",
+      "description": "Total keys across all Redis databases",
+      "gridPos": {"x": 20, "y": 20, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(redis_db_keys)",
+          "legendFormat": "keys",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+
+    {
+      "id": 27,
+      "type": "timeseries",
+      "title": "arq Queue Depth Over Time",
+      "description": "Redis ZCARD of arq:queue — jobs waiting to be picked up by the Railway worker",
+      "gridPos": {"x": 0, "y": 24, "w": 12, "h": 7},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "redis_key_size{key=\"arq:queue\"}",
+          "legendFormat": "arq queue depth",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "blue"},
+          "custom": {"lineWidth": 2, "fillOpacity": 20, "drawStyle": "line"},
+          "unit": "short",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 20}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "single"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+
+    {
+      "id": 28,
+      "type": "timeseries",
+      "title": "Redis Command Rate",
+      "description": "Commands processed per second. arq polls at poll_delay seconds — see Upstash budget in architecture doc.",
+      "gridPos": {"x": 12, "y": 24, "w": 12, "h": 7},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "rate(redis_commands_processed_total[1m])",
+          "legendFormat": "cmds/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "purple"},
+          "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"},
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "single"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+
+    {
+      "id": 29,
+      "type": "timeseries",
+      "title": "Redis Memory Usage",
+      "description": "Upstash free tier cap is 256MB. Watch this to avoid evictions.",
+      "gridPos": {"x": 0, "y": 31, "w": 12, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "redis_memory_used_bytes",
+          "legendFormat": "used",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "redis_maxmemory",
+          "legendFormat": "max configured",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"},
+          "unit": "bytes"
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "max configured"}, "properties": [{"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [8, 8]}}, {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+        ]
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Redis Key Count (by DB)",
+      "description": "Keys per Redis database. DB0 = arq queue + job results. DB1 = arq result backend.",
+      "gridPos": {"x": 12, "y": 31, "w": 12, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "redis_db_keys",
+          "legendFormat": "{{db}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 5, "drawStyle": "line"},
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    }
+
+  ]
+}

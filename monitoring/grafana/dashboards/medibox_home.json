@@ -1,0 +1,925 @@
+{
+  "title": "MediBox — Unified Overview",
+  "uid": "medibox-home",
+  "schemaVersion": 38,
+  "version": 1,
+  "tags": ["medibox"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "graphTooltip": 1,
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": ["medibox"],
+      "targetBlank": false,
+      "title": "Drill-down Dashboards",
+      "tooltip": "Jump to focused dashboards",
+      "type": "dashboards"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource",
+        "label": "Data Source"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Active Pi Devices",
+      "description": "Devices that pushed a camera frame in the last 30 s",
+      "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "active_devices_total",
+          "legendFormat": "devices",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Jobs Completed Today",
+      "description": "Successful OCR jobs in the last 24 h",
+      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(increase(ocr_jobs_total{status=\"completed\"}[24h]))",
+          "legendFormat": "completed",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "blue", "value": null}]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Queue Depth",
+      "description": "OCR jobs currently waiting for a worker",
+      "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "ocr_queue_depth",
+          "legendFormat": "queued",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 20}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "API Error Rate",
+      "description": "Fraction of 5xx HTTP responses in the last 5 min",
+      "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m])) * 100",
+          "legendFormat": "error %",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          },
+          "unit": "percent",
+          "decimals": 2,
+          "noValue": "0%"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "API p95 Latency",
+      "description": "95th percentile HTTP request duration over last 5 min",
+      "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "p95",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 500},
+              {"color": "red", "value": 1500}
+            ]
+          },
+          "unit": "ms",
+          "decimals": 0,
+          "noValue": "-"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Auth Failures (1 h)",
+      "description": "Failed authentication attempts in the last hour — elevated values may indicate brute force",
+      "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(increase(auth_failures_total[1h]))",
+          "legendFormat": "failures",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 20}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+
+    {
+      "id": 10,
+      "type": "row",
+      "title": "OCR Pipeline",
+      "gridPos": {"x": 0, "y": 4, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Job Throughput",
+      "description": "OCR jobs per second by status",
+      "gridPos": {"x": 0, "y": 5, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(ocr_jobs_total{status=\"completed\"}[5m]))",
+          "legendFormat": "completed/s",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(ocr_jobs_total{status=\"queued\"}[5m]))",
+          "legendFormat": "queued/s",
+          "refId": "B"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(ocr_jobs_total{status=\"failed\"}[5m]))",
+          "legendFormat": "failed/s",
+          "refId": "C"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(ocr_jobs_total{status=\"cancelled\"}[5m]))",
+          "legendFormat": "cancelled/s",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 10, "spanNulls": false, "drawStyle": "line", "gradientMode": "none"},
+          "unit": "reqps"
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "failed/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
+          {"matcher": {"id": "byName", "options": "completed/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "queued/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]}
+        ]
+      },
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "desc"},
+        "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"]}
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "End-to-End Processing Time",
+      "description": "Total OCR pipeline duration percentiles (p50 / p95 / p99)",
+      "gridPos": {"x": 12, "y": 5, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.50, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.95, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.99, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 0, "spanNulls": false, "drawStyle": "line"},
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "desc"},
+        "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"]}
+      }
+    },
+
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Queue, Corrections & Inference",
+      "gridPos": {"x": 0, "y": 13, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Queue Depth",
+      "description": "Pending jobs in the inference queue over time",
+      "gridPos": {"x": 0, "y": 14, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "ocr_queue_depth",
+          "legendFormat": "depth",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "blue"},
+          "custom": {"lineWidth": 2, "fillOpacity": 20, "drawStyle": "line"},
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 20}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "single"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Human Corrections",
+      "description": "Pharmacist manual corrections (feed model retraining)",
+      "gridPos": {"x": 8, "y": 14, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(corrections_total[10m]))",
+          "legendFormat": "corrections/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "orange"},
+          "custom": {"lineWidth": 2, "fillOpacity": 15, "drawStyle": "line"},
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "single"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "Inference Latency (Qwen/vLLM)",
+      "description": "Vertex AI / vLLM inference latency per grid",
+      "gridPos": {"x": 16, "y": 14, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.50, sum(rate(ocr_inference_latency_seconds_bucket[10m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.95, sum(rate(ocr_inference_latency_seconds_bucket[10m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 0, "drawStyle": "line"},
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+
+    {
+      "id": 30,
+      "type": "row",
+      "title": "API Traffic & Security",
+      "gridPos": {"x": 0, "y": 20, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "HTTP Request Rate by Status",
+      "description": "Requests per second grouped by HTTP status class",
+      "gridPos": {"x": 0, "y": 21, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(http_requests_total{status_code=~\"2..\"}[1m]))",
+          "legendFormat": "2xx",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(http_requests_total{status_code=~\"4..\"}[1m]))",
+          "legendFormat": "4xx",
+          "refId": "B"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[1m]))",
+          "legendFormat": "5xx",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"},
+          "unit": "reqps"
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "2xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "4xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]},
+          {"matcher": {"id": "byName", "options": "5xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+        ]
+      },
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "desc"},
+        "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean"]}
+      }
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Security Events",
+      "description": "Auth failures, rate limit hits, and suspicious requests over time",
+      "gridPos": {"x": 12, "y": 21, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(auth_failures_total[5m]))",
+          "legendFormat": "auth failures/s",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(rate_limit_hits_total[5m]))",
+          "legendFormat": "rate limit hits/s",
+          "refId": "B"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(suspicious_requests_total[5m]))",
+          "legendFormat": "suspicious/s",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"},
+          "unit": "reqps"
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "auth failures/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
+          {"matcher": {"id": "byName", "options": "suspicious/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "dark-red"}}]}
+        ]
+      },
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "desc"},
+        "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"]}
+      }
+    },
+
+    {
+      "id": 40,
+      "type": "row",
+      "title": "Edge Devices (Pi 5 — pi-0001)",
+      "gridPos": {"x": 0, "y": 29, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "Active Devices",
+      "description": "Count of Pi devices actively sending frames",
+      "gridPos": {"x": 0, "y": 30, "w": 12, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "active_devices_total",
+          "legendFormat": "active devices",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "green"},
+          "custom": {"lineWidth": 2, "fillOpacity": 20, "drawStyle": "line"},
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "single"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 42,
+      "type": "timeseries",
+      "title": "Camera Heartbeat Delay",
+      "description": "Delay between consecutive camera frame pushes per device",
+      "gridPos": {"x": 12, "y": 30, "w": 12, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.50, sum(rate(device_heartbeat_delay_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.95, sum(rate(device_heartbeat_delay_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 0, "drawStyle": "line"},
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 15}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+
+    {
+      "id": 50,
+      "type": "row",
+      "title": "Infrastructure",
+      "gridPos": {"x": 0, "y": 36, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 51,
+      "type": "timeseries",
+      "title": "Redis Command Rate",
+      "description": "Redis commands issued by the API/worker processes",
+      "gridPos": {"x": 0, "y": 37, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(redis_commands_total[1m]))",
+          "legendFormat": "cmds/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "purple"},
+          "custom": {"lineWidth": 1, "fillOpacity": 10, "drawStyle": "line"},
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "single"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 52,
+      "type": "timeseries",
+      "title": "Pipeline Retries",
+      "description": "arq job retries — sustained values indicate a persistent worker or RunPod error",
+      "gridPos": {"x": 8, "y": 37, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(pipeline_retries_total[5m]))",
+          "legendFormat": "retries/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "orange"},
+          "custom": {"lineWidth": 2, "fillOpacity": 15, "drawStyle": "bars"},
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "single"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 53,
+      "type": "timeseries",
+      "title": "Cold Starts (RunPod/vLLM)",
+      "description": "Worker cold-start events — each represents a GPU warm-up delay",
+      "gridPos": {"x": 16, "y": 37, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(increase(runpod_cold_starts_total[1h]))",
+          "legendFormat": "cold starts/hr",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "semi-dark-red"},
+          "custom": {"lineWidth": 2, "fillOpacity": 15, "drawStyle": "bars"},
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "single"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+
+    {
+      "id": 60,
+      "type": "row",
+      "title": "Platform — Neon + Upstash (requires exporters)",
+      "description": "Metrics from postgres_exporter and redis_exporter. Run docker-compose or deploy exporters on Railway.",
+      "gridPos": {"x": 0, "y": 43, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 61,
+      "type": "stat",
+      "title": "DB Connections",
+      "gridPos": {"x": 0, "y": 44, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(pg_stat_database_numbackends{datname!~\"template.*|postgres\"})",
+          "legendFormat": "connections",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 50}, {"color": "red", "value": 90}]},
+          "unit": "short",
+          "noValue": "—"
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 62,
+      "type": "stat",
+      "title": "DB Cache Hit Rate",
+      "gridPos": {"x": 4, "y": 44, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(pg_stat_database_blks_hit_total{datname!~\"template.*|postgres\"}) / (sum(pg_stat_database_blks_hit_total{datname!~\"template.*|postgres\"}) + sum(pg_stat_database_blks_read_total{datname!~\"template.*|postgres\"})) * 100",
+          "legendFormat": "hit %",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 90}, {"color": "green", "value": 95}]},
+          "unit": "percent",
+          "decimals": 1,
+          "noValue": "—"
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 63,
+      "type": "stat",
+      "title": "arq Queue Depth",
+      "description": "Redis ZCARD of arq:queue — from redis_exporter check-keys",
+      "gridPos": {"x": 8, "y": 44, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "redis_key_size{key=\"arq:queue\"}",
+          "legendFormat": "jobs",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 20}]},
+          "unit": "short",
+          "noValue": "—"
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 64,
+      "type": "stat",
+      "title": "Redis Memory",
+      "description": "Upstash free tier = 256MB",
+      "gridPos": {"x": 12, "y": 44, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "redis_memory_used_bytes",
+          "legendFormat": "used",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 200000000}, {"color": "red", "value": 245000000}]},
+          "unit": "bytes",
+          "noValue": "—"
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 65,
+      "type": "stat",
+      "title": "Redis Clients",
+      "gridPos": {"x": 16, "y": 44, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "redis_connected_clients",
+          "legendFormat": "clients",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 20}]},
+          "unit": "short",
+          "noValue": "—"
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 66,
+      "type": "stat",
+      "title": "DB Deadlocks (1 h)",
+      "gridPos": {"x": 20, "y": 44, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(increase(pg_stat_database_deadlocks_total{datname!~\"template.*|postgres\"}[1h]))",
+          "legendFormat": "deadlocks",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]},
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "wideLayout": true, "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    }
+  ]
+}

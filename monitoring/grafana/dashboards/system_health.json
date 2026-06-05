@@ -1,74 +1,285 @@
 {
   "title": "Medibox — System Health",
   "uid": "medibox-system",
-  "tags": ["medibox", "system"],
+  "schemaVersion": 38,
+  "version": 1,
+  "tags": ["medibox"],
   "timezone": "browser",
   "refresh": "10s",
-  "time": { "from": "now-1h", "to": "now" },
+  "time": {"from": "now-1h", "to": "now"},
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource",
+        "label": "Data Source"
+      }
+    ]
+  },
   "panels": [
     {
-      "id": 1, "type": "stat", "title": "Request Rate (req/s)",
-      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
-      "targets": [{ "expr": "sum(rate(http_requests_total[1m]))", "legendFormat": "req/s" }],
-      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } }
-    },
-    {
-      "id": 2, "type": "stat", "title": "Error Rate",
-      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
-      "targets": [{
-        "expr": "sum(rate(http_requests_total{status_code=~'5..'}[5m])) / sum(rate(http_requests_total[5m]))",
-        "legendFormat": "error %"
-      }],
+      "id": 1,
+      "type": "stat",
+      "title": "Request Rate (req/s)",
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(http_requests_total[1m]))",
+          "legendFormat": "req/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
       "options": {
         "colorMode": "background",
-        "thresholds": { "steps": [
-          { "color": "green", "value": null },
-          { "color": "yellow", "value": 0.01 },
-          { "color": "red", "value": 0.05 }
-        ]}
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
       }
     },
     {
-      "id": 3, "type": "stat", "title": "p95 Latency",
-      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
-      "targets": [{
-        "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
-        "legendFormat": "p95"
-      }],
-      "fieldConfig": { "defaults": { "unit": "s" } }
-    },
-    {
-      "id": 4, "type": "stat", "title": "Active Devices",
-      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
-      "targets": [{ "expr": "active_devices_total", "legendFormat": "devices" }]
-    },
-    {
-      "id": 5, "type": "timeseries", "title": "Request Rate by Status",
-      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "id": 2,
+      "type": "stat",
+      "title": "Error Rate",
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "targets": [
-        { "expr": "sum(rate(http_requests_total{status_code=~'2..'}[1m]))", "legendFormat": "2xx" },
-        { "expr": "sum(rate(http_requests_total{status_code=~'4..'}[1m]))", "legendFormat": "4xx" },
-        { "expr": "sum(rate(http_requests_total{status_code=~'5..'}[1m]))", "legendFormat": "5xx" }
-      ]
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m])) * 100",
+          "legendFormat": "error %",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          },
+          "unit": "percent",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
     },
     {
-      "id": 6, "type": "timeseries", "title": "Latency Percentiles",
-      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "s" } },
+      "id": 3,
+      "type": "stat",
+      "title": "p95 Latency",
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "targets": [
-        { "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50" },
-        { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95" },
-        { "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p99" }
-      ]
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "p95",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 500},
+              {"color": "red", "value": 1500}
+            ]
+          },
+          "unit": "ms",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
     },
     {
-      "id": 7, "type": "timeseries", "title": "Latency by Endpoint (p95)",
-      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "s" } },
-      "targets": [{
-        "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, endpoint))",
-        "legendFormat": "{{ endpoint }}"
-      }]
+      "id": 4,
+      "type": "stat",
+      "title": "Active Devices",
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "active_devices_total",
+          "legendFormat": "devices",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Request Rate by Status",
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(http_requests_total{status_code=~\"2..\"}[1m]))",
+          "legendFormat": "2xx",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(http_requests_total{status_code=~\"4..\"}[1m]))",
+          "legendFormat": "4xx",
+          "refId": "B"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[1m]))",
+          "legendFormat": "5xx",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line", "spanNulls": false},
+          "unit": "reqps"
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "2xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "4xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]},
+          {"matcher": {"id": "byName", "options": "5xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+        ]
+      },
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "desc"},
+        "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean"]}
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Latency Percentiles",
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 0, "drawStyle": "line"},
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "desc"},
+        "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"]}
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Latency by Endpoint (p95)",
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, endpoint))",
+          "legendFormat": "{{endpoint}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 0, "drawStyle": "line"},
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "desc"},
+        "legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}
+      }
     }
   ]
 }

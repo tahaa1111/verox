@@ -1,6 +1,6 @@
 global:
-  scrape_interval: 10s
-  evaluation_interval: 10s
+  scrape_interval: 15s
+  evaluation_interval: 15s
   external_labels:
     environment: production
     project: medibox
@@ -11,26 +11,61 @@ rule_files:
 alerting:
   alertmanagers:
     - static_configs:
-        - targets: []  # configure your alertmanager endpoint here
+        - targets: []  # configure your Alertmanager endpoint here
+
+# ---------------------------------------------------------------------------
+# Transport note
+# ---------------------------------------------------------------------------
+# Application metrics (OCR pipeline, security, API latency) are pushed from
+# the Railway API directly to Grafana Cloud via OTel OTLP/HTTP — Prometheus
+# does NOT scrape those.  The scrape jobs below cover:
+#   1. Railway API /metrics endpoint (if you add one)
+#   2. postgres_exporter → Neon Postgres platform metrics
+#   3. redis_exporter   → Upstash Redis + arq queue depth
+#
+# For LOCAL development the targets use Docker service names.
+# For PRODUCTION point the targets at your Railway-hosted exporters.
+# ---------------------------------------------------------------------------
 
 scrape_configs:
-  # FastAPI API service
-  - job_name: medibox_api
-    scheme: https
-    metrics_path: /metrics
-    authorization:
-      credentials: "${METRICS_SECRET}"
-    static_configs:
-      - targets:
-          - medibox-api-production.up.railway.app
-    tls_config:
-      insecure_skip_verify: false
 
-  # Local development (no TLS)
-  - job_name: medibox_api_local
-    metrics_path: /metrics
-    authorization:
-      credentials: "${METRICS_SECRET}"
+  # ---- Railway API (application /metrics endpoint) -----------------------
+  # The app currently uses OTel push (no scrape endpoint).
+  # Uncomment and update the target when/if a /metrics endpoint is added.
+  # - job_name: medibox_api
+  #   scheme: https
+  #   metrics_path: /metrics
+  #   authorization:
+  #     credentials: "${METRICS_SECRET}"
+  #   static_configs:
+  #     - targets:
+  #         - medibox-api-production.up.railway.app
+
+  # ---- Local development --------------------------------------------------
+  # - job_name: medibox_api_local
+  #   metrics_path: /metrics
+  #   authorization:
+  #     credentials: "${METRICS_SECRET}"
+  #   static_configs:
+  #     - targets:
+  #         - host.docker.internal:8000
+
+  # ---- Neon Postgres (via postgres_exporter) ------------------------------
+  # Exports: pg_stat_database_*, pg_locks_count, pg_stat_activity_count,
+  #          pg_up, pg_scrape_collector_success
+  - job_name: medibox_neon_postgres
     static_configs:
       - targets:
-          - localhost:8000
+          - postgres_exporter:9187   # docker-compose service name
+    # For production Railway: replace with your Railway postgres_exporter URL
+    # e.g. - medibox-pg-exporter.up.railway.app:9187
+
+  # ---- Upstash Redis (via redis_exporter) ---------------------------------
+  # Exports: redis_connected_clients, redis_used_memory, redis_keyspace_*,
+  #          redis_commands_processed_total, redis_key_size{key="arq:queue"}
+  - job_name: medibox_upstash_redis
+    static_configs:
+      - targets:
+          - redis_exporter:9121      # docker-compose service name
+    # For production Railway: replace with your Railway redis_exporter URL
+    # e.g. - medibox-redis-exporter.up.railway.app:9121

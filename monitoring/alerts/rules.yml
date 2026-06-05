@@ -100,7 +100,7 @@ groups:
           description: "{{ $value | humanizePercentage }} of OCR jobs are failing"
 
       - alert: QueueBacklogLarge
-        expr: celery_queue_depth{queue="inference"} > 20
+        expr: ocr_queue_depth > 20
         for: 5m
         labels:
           severity: warning

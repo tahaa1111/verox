@@ -57,7 +57,7 @@ Vercel (React frontend)
 | Storage | Cloudflare R2 (crop images) |
 | Auth | Firebase Authentication (JWT + custom claims) |
 | Frontend | React, TypeScript, Tailwind CSS, Vite, Vercel |
-| Infra as code | Terraform (Neon, RunPod, Upstash, Cloudflare) |
+| Monitoring | Grafana Cloud (OTel OTLP push), local docker-compose stack |
 
 ---
 
@@ -73,7 +73,7 @@ medibox-cloud/
 ├── pi_edge/            Canonical Pi source (camera, YOLO, preprocessing)
 ├── migrations/         Alembic database schema
 ├── referances/         Tunisian drug registry (AMM) + doctor registry (TAHA)
-├── terraform/          Infrastructure as code
+├── monitoring/         Grafana dashboards + Prometheus + exporters
 ├── monitoring/         Grafana dashboards + Prometheus config
 ├── scripts/            Utility scripts (admin, migrations, RunPod control)
 ├── src/training/       QLoRA fine-tuning pipeline

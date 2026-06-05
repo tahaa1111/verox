@@ -1,80 +1,392 @@
 {
   "title": "Medibox — OCR Pipeline",
   "uid": "medibox-ocr",
-  "tags": ["medibox", "ocr"],
+  "schemaVersion": 38,
+  "version": 1,
+  "tags": ["medibox"],
   "timezone": "browser",
   "refresh": "15s",
-  "time": { "from": "now-6h", "to": "now" },
+  "time": {"from": "now-6h", "to": "now"},
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource",
+        "label": "Data Source"
+      }
+    ]
+  },
   "panels": [
     {
-      "id": 1, "type": "stat", "title": "Jobs Queued (1h)",
-      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
-      "targets": [{ "expr": "sum(increase(ocr_jobs_total{status='queued'}[1h]))", "legendFormat": "queued" }]
-    },
-    {
-      "id": 2, "type": "stat", "title": "Jobs Completed (1h)",
-      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
-      "targets": [{ "expr": "sum(increase(ocr_jobs_total{status='completed'}[1h]))", "legendFormat": "completed" }],
-      "options": { "colorMode": "background", "thresholds": { "steps": [{ "color": "green", "value": null }] } }
-    },
-    {
-      "id": 3, "type": "stat", "title": "Jobs Failed (1h)",
-      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
-      "targets": [{ "expr": "sum(increase(ocr_jobs_total{status='failed'}[1h]))", "legendFormat": "failed" }],
+      "id": 1,
+      "type": "stat",
+      "title": "Jobs Queued (1 h)",
+      "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(increase(ocr_jobs_total{status=\"queued\"}[1h]))",
+          "legendFormat": "queued",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
       "options": {
         "colorMode": "background",
-        "thresholds": { "steps": [
-          { "color": "green", "value": null },
-          { "color": "yellow", "value": 1 },
-          { "color": "red", "value": 5 }
-        ]}
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
       }
     },
     {
-      "id": 4, "type": "stat", "title": "Queue Depth",
-      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
-      "targets": [{ "expr": "celery_queue_depth{queue='inference'}", "legendFormat": "depth" }],
+      "id": 2,
+      "type": "stat",
+      "title": "Jobs Completed (1 h)",
+      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(increase(ocr_jobs_total{status=\"completed\"}[1h]))",
+          "legendFormat": "completed",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
       "options": {
         "colorMode": "background",
-        "thresholds": { "steps": [
-          { "color": "green", "value": null },
-          { "color": "yellow", "value": 5 },
-          { "color": "red", "value": 20 }
-        ]}
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
       }
     },
     {
-      "id": 5, "type": "stat", "title": "p95 Processing Time",
-      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
-      "fieldConfig": { "defaults": { "unit": "s" } },
-      "targets": [{
-        "expr": "histogram_quantile(0.95, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))",
-        "legendFormat": "p95"
-      }]
-    },
-    {
-      "id": 6, "type": "timeseries", "title": "Job Throughput",
-      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "id": 3,
+      "type": "stat",
+      "title": "Jobs Failed (1 h)",
+      "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "targets": [
-        { "expr": "sum(rate(ocr_jobs_total{status='queued'}[5m]))", "legendFormat": "queued/s" },
-        { "expr": "sum(rate(ocr_jobs_total{status='completed'}[5m]))", "legendFormat": "completed/s" },
-        { "expr": "sum(rate(ocr_jobs_total{status='failed'}[5m]))", "legendFormat": "failed/s" }
-      ]
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(increase(ocr_jobs_total{status=\"failed\"}[1h]))",
+          "legendFormat": "failed",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
     },
     {
-      "id": 7, "type": "timeseries", "title": "Processing Time Distribution",
-      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "s" } },
+      "id": 4,
+      "type": "stat",
+      "title": "Queue Depth",
+      "description": "Jobs waiting for a worker right now",
+      "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "targets": [
-        { "expr": "histogram_quantile(0.50, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))", "legendFormat": "p50" },
-        { "expr": "histogram_quantile(0.95, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))", "legendFormat": "p95" },
-        { "expr": "histogram_quantile(0.99, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))", "legendFormat": "p99" }
-      ]
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "ocr_queue_depth",
+          "legendFormat": "depth",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 20}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
     },
     {
-      "id": 8, "type": "timeseries", "title": "Human Corrections",
-      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 6 },
-      "targets": [{ "expr": "sum(rate(corrections_total[10m]))", "legendFormat": "corrections/s" }]
+      "id": 5,
+      "type": "stat",
+      "title": "p95 Processing Time",
+      "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.95, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 60},
+              {"color": "red", "value": 120}
+            ]
+          },
+          "unit": "s",
+          "noValue": "-"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Pipeline Retries (1 h)",
+      "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(increase(pipeline_retries_total[1h]))",
+          "legendFormat": "retries",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 3},
+              {"color": "red", "value": 10}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Job Throughput",
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(ocr_jobs_total{status=\"queued\"}[5m]))",
+          "legendFormat": "queued/s",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(ocr_jobs_total{status=\"completed\"}[5m]))",
+          "legendFormat": "completed/s",
+          "refId": "B"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(ocr_jobs_total{status=\"failed\"}[5m]))",
+          "legendFormat": "failed/s",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line", "spanNulls": false},
+          "unit": "reqps"
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "completed/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "failed/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+        ]
+      },
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "desc"},
+        "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"]}
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Processing Time Distribution",
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.50, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.95, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.99, sum(rate(ocr_processing_seconds_bucket[10m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 0, "drawStyle": "line"},
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "desc"},
+        "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"]}
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Inference Latency (Qwen / vLLM)",
+      "gridPos": {"x": 0, "y": 12, "w": 12, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.50, sum(rate(ocr_inference_latency_seconds_bucket[10m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.95, sum(rate(ocr_inference_latency_seconds_bucket[10m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 0, "drawStyle": "line"},
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Human Corrections",
+      "gridPos": {"x": 12, "y": 12, "w": 12, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(corrections_total[10m]))",
+          "legendFormat": "corrections/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "orange"},
+          "custom": {"lineWidth": 2, "fillOpacity": 15, "drawStyle": "line"},
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "single"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
     }
   ]
 }

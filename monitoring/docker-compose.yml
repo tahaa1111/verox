@@ -1,9 +1,18 @@
 version: "3.8"
 
-# Local monitoring stack — Prometheus + Grafana
+# Local monitoring stack — Prometheus + Grafana + exporters
 # Usage: docker-compose -f monitoring/docker-compose.yml up -d
-# Grafana: http://localhost:3001  (admin / admin)
+#
+# Required env vars (add to monitoring/.env or export in shell):
+#   DATABASE_URL          Neon connection string  (postgresql://user:pass@host.neon.tech/medibox?sslmode=require)
+#   REDIS_URL             Upstash URL             (rediss://default:pass@endpoint.upstash.io:6380)
+#   METRICS_SECRET        Bearer token for /metrics scrape endpoint
+#   GRAFANA_ADMIN_PASSWORD  (optional, default: admin)
+#
+# Grafana:    http://localhost:3001  (admin / admin)
 # Prometheus: http://localhost:9090
+# PG Exporter metrics: http://localhost:9187/metrics
+# Redis Exporter metrics: http://localhost:9121/metrics
 
 services:
   prometheus:
@@ -41,6 +50,37 @@ services:
       - "3001:3000"
     depends_on:
       - prometheus
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------
+  # Neon Postgres exporter
+  # Exposes pg_stat_database_*, pg_locks_count, pg_stat_activity_count
+  # Prometheus scrapes it at http://postgres_exporter:9187/metrics
+  # -------------------------------------------------------------------
+  postgres_exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: medibox_postgres_exporter
+    environment:
+      - DATA_SOURCE_NAME=${DATABASE_URL}
+    ports:
+      - "9187:9187"
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------
+  # Upstash Redis exporter
+  # Exposes redis_connected_clients, redis_used_memory, redis_keyspace_*,
+  # redis_commands_processed_total, and redis_key_size{key="arq:queue"}
+  # (the last one is the arq job queue depth — no app code change needed)
+  # Prometheus scrapes it at http://redis_exporter:9121/metrics
+  # -------------------------------------------------------------------
+  redis_exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    container_name: medibox_redis_exporter
+    environment:
+      - REDIS_ADDR=${REDIS_URL}
+      - REDIS_EXPORTER_CHECK_KEYS=arq:queue
+    ports:
+      - "9121:9121"
     restart: unless-stopped
 
 volumes:

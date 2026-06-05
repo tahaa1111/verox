@@ -1,53 +1,287 @@
 {
   "title": "Medibox — IoT Devices",
   "uid": "medibox-iot",
-  "tags": ["medibox", "iot"],
+  "schemaVersion": 38,
+  "version": 1,
+  "tags": ["medibox"],
   "timezone": "browser",
   "refresh": "10s",
-  "time": { "from": "now-1h", "to": "now" },
+  "time": {"from": "now-1h", "to": "now"},
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource",
+        "label": "Data Source"
+      }
+    ]
+  },
   "panels": [
     {
-      "id": 1, "type": "stat", "title": "Active Devices",
-      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
-      "targets": [{ "expr": "active_devices_total", "legendFormat": "active" }],
-      "options": {
-        "colorMode": "background",
-        "thresholds": { "steps": [
-          { "color": "red", "value": null },
-          { "color": "green", "value": 1 }
-        ]}
-      }
-    },
-    {
-      "id": 2, "type": "stat", "title": "Heartbeat p95 Delay",
-      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
-      "fieldConfig": { "defaults": { "unit": "s" } },
-      "targets": [{
-        "expr": "histogram_quantile(0.95, sum(rate(device_heartbeat_delay_seconds_bucket[5m])) by (le))",
-        "legendFormat": "p95"
-      }],
-      "options": {
-        "colorMode": "background",
-        "thresholds": { "steps": [
-          { "color": "green", "value": null },
-          { "color": "yellow", "value": 5 },
-          { "color": "red", "value": 15 }
-        ]}
-      }
-    },
-    {
-      "id": 3, "type": "timeseries", "title": "Active Devices Over Time",
-      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
-      "targets": [{ "expr": "active_devices_total", "legendFormat": "active devices" }]
-    },
-    {
-      "id": 4, "type": "timeseries", "title": "Device Heartbeat Delay",
-      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "s" } },
+      "id": 1,
+      "type": "stat",
+      "title": "Active Devices",
+      "description": "Pi devices that pushed a camera frame in the last 30 s",
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "targets": [
-        { "expr": "histogram_quantile(0.50, sum(rate(device_heartbeat_delay_seconds_bucket[5m])) by (le))", "legendFormat": "p50" },
-        { "expr": "histogram_quantile(0.95, sum(rate(device_heartbeat_delay_seconds_bucket[5m])) by (le))", "legendFormat": "p95" }
-      ]
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "active_devices_total",
+          "legendFormat": "active",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Heartbeat p95 Delay",
+      "description": "95th percentile delay between consecutive camera frame pushes",
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.95, sum(rate(device_heartbeat_delay_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 15}
+            ]
+          },
+          "unit": "s",
+          "noValue": "-"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Jobs Submitted (1 h)",
+      "description": "Total OCR submissions from all edge devices",
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(increase(ocr_jobs_total{status=\"queued\"}[1h]))",
+          "legendFormat": "submitted",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Auth Failures from Devices (1 h)",
+      "description": "Token or device-claim failures from edge devices",
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(increase(auth_failures_total[1h]))",
+          "legendFormat": "failures",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 3},
+              {"color": "red", "value": 10}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Active Devices Over Time",
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "active_devices_total",
+          "legendFormat": "active devices",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "green"},
+          "custom": {"lineWidth": 2, "fillOpacity": 20, "drawStyle": "line"},
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "single"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Camera Heartbeat Delay",
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.50, sum(rate(device_heartbeat_delay_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "histogram_quantile(0.95, sum(rate(device_heartbeat_delay_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 0, "drawStyle": "line"},
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 15}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Submissions from Edge (queued vs completed)",
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 7},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(ocr_jobs_total{status=\"queued\"}[5m]))",
+          "legendFormat": "queued/s",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(ocr_jobs_total{status=\"completed\"}[5m]))",
+          "legendFormat": "completed/s",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"},
+          "unit": "reqps"
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "completed/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "queued/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]}
+        ]
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
     }
   ]
 }

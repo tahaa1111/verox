@@ -33,6 +33,38 @@ _WS_PREFIX = "ws:job:"
 _CANCEL_PREFIX = "cancel:"
 
 
+def _to_uuid(job_id: Any) -> "uuid.UUID | None":
+    """
+    Parse job_id to uuid.UUID, tolerating all formats arq may produce:
+      - Standard hyphenated:  "acae8e00-af69-4c0b-bf35-aa48b1ceaa57"
+      - arq hex (no hyphens): "acae8e00af694c0bbf35aa48b1ceaa57"
+      - arq prefixed:         "run_pipeline:acae8e00af694c0bbf35aa48b1ceaa57"
+    Returns None (instead of raising) so callers can decide whether to skip
+    the DB write rather than crashing the whole pipeline.
+    """
+    import uuid as _uuid
+
+    if isinstance(job_id, _uuid.UUID):
+        return job_id
+    if not isinstance(job_id, str):
+        return None
+
+    # Try every colon-separated segment — arq sometimes prefixes with function name
+    for part in job_id.split(":"):
+        clean = part.replace("-", "").strip()
+        if len(clean) == 32:
+            try:
+                return _uuid.UUID(clean)
+            except ValueError:
+                continue
+
+    # Last-resort: direct parse (handles standard hyphenated form)
+    try:
+        return _uuid.UUID(job_id)
+    except ValueError:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # arq lifecycle hooks
 # ---------------------------------------------------------------------------
@@ -306,12 +338,15 @@ async def _update_job(
         updates["review_reasons"] = list(review_reasons)
 
     set_clause = ", ".join(f"{k} = :{k}" for k in updates)
-    # Pass job_id as uuid.UUID so asyncpg binds the type correctly without
-    # needing ::uuid cast (which confuses SQLAlchemy's text() parameter parser)
-    import uuid as _uuid
-    updates["job_id"] = _uuid.UUID(job_id) if isinstance(job_id, str) else job_id
 
     try:
+        # _to_uuid handles hyphenated, plain-hex, and arq-prefixed job IDs
+        job_uuid = _to_uuid(job_id)
+        if job_uuid is None:
+            logger.warning("db_update_skipped_invalid_job_id", job_id=repr(job_id))
+            return
+        updates["job_id"] = job_uuid
+
         session_factory = ctx["db_session_factory"]
         async with session_factory() as session:
             await session.execute(
@@ -363,12 +398,14 @@ async def _get_active_model_version(ctx: dict) -> str:
 
 async def _compute_queue_wait(ctx: dict, job_id: str) -> int:
     try:
+        job_uuid = _to_uuid(job_id)
+        if job_uuid is None:
+            return 0
         session_factory = ctx["db_session_factory"]
         async with session_factory() as session:
-            import uuid as _uuid
             result = await session.execute(
                 text("SELECT created_at FROM jobs WHERE id = :job_id"),
-                {"job_id": _uuid.UUID(job_id) if isinstance(job_id, str) else job_id},
+                {"job_id": job_uuid},
             )
             row = result.fetchone()
             if row:
@@ -389,8 +426,11 @@ async def _write_dead_letter(
     attempts: int,
 ) -> None:
     """Write exhausted job to failed_jobs table for manual review / re-run."""
-    import uuid as _uuid
     try:
+        job_uuid = _to_uuid(job_id)
+        if job_uuid is None:
+            logger.warning("dead_letter_skipped_invalid_job_id", job_id=repr(job_id))
+            return
         session_factory = ctx["db_session_factory"]
         async with session_factory() as session:
             await session.execute(
@@ -405,7 +445,7 @@ async def _write_dead_letter(
                             failed_at  = EXCLUDED.failed_at
                 """),
                 {
-                    "job_id": _uuid.UUID(job_id) if isinstance(job_id, str) else job_id,
+                    "job_id": job_uuid,
                     "payload": json.dumps({
                         "device_id": payload.get("device_id"),
                         "session_id": payload.get("session_id"),

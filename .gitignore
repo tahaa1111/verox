@@ -1,6 +1,7 @@
 .env
 *.env.local
 *.env.production
+monitoring/.env
 __pycache__/
 *.py[cod]
 *.pyo

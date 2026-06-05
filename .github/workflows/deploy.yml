@@ -69,7 +69,7 @@ jobs:
         run: docker build -f services/api/Dockerfile -t medibox-api:scan . 2>&1 | tail -5
 
       - name: Scan with Trivy (fail on CRITICAL)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.30.0
         with:
           image-ref: medibox-api:scan
           format: table
@@ -78,7 +78,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Scan with Trivy (warn on HIGH)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.30.0
         with:
           image-ref: medibox-api:scan
           format: table
@@ -122,7 +122,7 @@ jobs:
   # ---------------------------------------------------------------------------
   deploy-api:
     name: Deploy API → Railway
-    needs: [security-scan, test]
+    needs: [security-scan, image-scan, test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

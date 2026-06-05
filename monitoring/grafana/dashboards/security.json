@@ -1,79 +1,315 @@
 {
-  "title": "Medibox — Security Dashboard",
+  "title": "Medibox — Security",
   "uid": "medibox-security",
-  "tags": ["medibox", "security"],
+  "schemaVersion": 38,
+  "version": 1,
+  "tags": ["medibox"],
   "timezone": "browser",
   "refresh": "10s",
-  "time": { "from": "now-3h", "to": "now" },
+  "time": {"from": "now-3h", "to": "now"},
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource",
+        "label": "Data Source"
+      }
+    ]
+  },
   "panels": [
     {
-      "id": 1, "type": "stat", "title": "Auth Failures (1h)",
-      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
-      "targets": [{ "expr": "sum(increase(auth_failures_total[1h]))", "legendFormat": "failures" }],
-      "options": {
-        "colorMode": "background",
-        "thresholds": { "steps": [
-          { "color": "green", "value": null },
-          { "color": "yellow", "value": 5 },
-          { "color": "red", "value": 20 }
-        ]}
-      }
-    },
-    {
-      "id": 2, "type": "stat", "title": "Rate Limit Hits (1h)",
-      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
-      "targets": [{ "expr": "sum(increase(rate_limit_hits_total[1h]))", "legendFormat": "hits" }]
-    },
-    {
-      "id": 3, "type": "stat", "title": "Brute Force Events",
-      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
-      "targets": [{ "expr": "sum(increase(suspicious_requests_total{type='brute_force'}[1h]))", "legendFormat": "events" }],
-      "options": {
-        "colorMode": "background",
-        "thresholds": { "steps": [
-          { "color": "green", "value": null },
-          { "color": "red", "value": 1 }
-        ]}
-      }
-    },
-    {
-      "id": 4, "type": "stat", "title": "Blocked IP Attempts (1h)",
-      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
-      "targets": [{ "expr": "sum(increase(suspicious_requests_total{type='blocked_ip_attempt'}[1h]))", "legendFormat": "attempts" }]
-    },
-    {
-      "id": 5, "type": "timeseries", "title": "Auth Failures by Reason",
-      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
-      "targets": [{
-        "expr": "sum(rate(auth_failures_total[5m])) by (reason)",
-        "legendFormat": "{{ reason }}"
-      }]
-    },
-    {
-      "id": 6, "type": "timeseries", "title": "Rate Limit Hits by Layer",
-      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
-      "targets": [{
-        "expr": "sum(rate(rate_limit_hits_total[5m])) by (layer)",
-        "legendFormat": "{{ layer }}"
-      }]
-    },
-    {
-      "id": 7, "type": "timeseries", "title": "Suspicious Activity Over Time",
-      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 8 },
+      "id": 1,
+      "type": "stat",
+      "title": "Auth Failures (1 h)",
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "targets": [
-        { "expr": "sum(rate(suspicious_requests_total{type='brute_force'}[5m]))", "legendFormat": "brute force" },
-        { "expr": "sum(rate(suspicious_requests_total{type='blocked_ip_attempt'}[5m]))", "legendFormat": "blocked IP" },
-        { "expr": "sum(rate(auth_failures_total[5m]))", "legendFormat": "auth failures" },
-        { "expr": "sum(rate(rate_limit_hits_total[5m]))", "legendFormat": "rate limit hits" }
-      ]
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(increase(auth_failures_total[1h]))",
+          "legendFormat": "failures",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 20}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
     },
     {
-      "id": 8, "type": "timeseries", "title": "Admin Actions",
-      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 6 },
-      "targets": [{
-        "expr": "sum(rate(admin_actions_total[5m])) by (action)",
-        "legendFormat": "{{ action }}"
-      }]
+      "id": 2,
+      "type": "stat",
+      "title": "Rate Limit Hits (1 h)",
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(increase(rate_limit_hits_total[1h]))",
+          "legendFormat": "hits",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 10},
+              {"color": "red", "value": 50}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Brute Force Events (1 h)",
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(increase(suspicious_requests_total{type=\"brute_force\"}[1h]))",
+          "legendFormat": "events",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Blocked IP Attempts (1 h)",
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(increase(suspicious_requests_total{type=\"blocked_ip_attempt\"}[1h]))",
+          "legendFormat": "attempts",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 20}
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Auth Failures by Reason",
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(auth_failures_total[5m])) by (reason)",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"},
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "desc"},
+        "legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Rate Limit Hits by Layer",
+      "description": "Layers: ip | user | device | burst",
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(rate_limit_hits_total[5m])) by (layer)",
+          "legendFormat": "{{layer}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"},
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "desc"},
+        "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"]}
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Suspicious Activity Timeline",
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(suspicious_requests_total{type=\"brute_force\"}[5m]))",
+          "legendFormat": "brute force",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(suspicious_requests_total{type=\"blocked_ip_attempt\"}[5m]))",
+          "legendFormat": "blocked IP attempts",
+          "refId": "B"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(auth_failures_total[5m]))",
+          "legendFormat": "auth failures",
+          "refId": "C"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(rate_limit_hits_total[5m]))",
+          "legendFormat": "rate limit hits",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2, "fillOpacity": 10, "drawStyle": "line"},
+          "unit": "reqps"
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "brute force"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "dark-red"}}]},
+          {"matcher": {"id": "byName", "options": "auth failures"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+        ]
+      },
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "desc"},
+        "legend": {"displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"]}
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Admin Actions",
+      "gridPos": {"x": 0, "y": 20, "w": 24, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(rate(admin_actions_total[5m])) by (action)",
+          "legendFormat": "{{action}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 1, "fillOpacity": 5, "drawStyle": "line"},
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
     }
   ]
 }
