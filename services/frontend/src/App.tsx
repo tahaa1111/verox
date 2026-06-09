@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
+import { Analytics } from "@vercel/analytics/react";
 import { auth } from "./firebase";
 import { useStore } from "./store";
 import { DisclaimerBanner } from "./components/DisclaimerBanner";
@@ -119,6 +120,7 @@ export default function App() {
           </Routes>
         </main>
       </div>
+      <Analytics />
     </BrowserRouter>
   );
 }
