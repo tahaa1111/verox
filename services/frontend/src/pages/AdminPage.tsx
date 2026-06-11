@@ -159,8 +159,8 @@ export function AdminPage() {
       )}
 
       <p className="text-xs text-gray-400">
-        All admin actions are audited. For traffic split changes, use the Vertex AI console or
-        the rollback endpoint. Pharmacist verification required on all prescriptions.
+        All admin actions are audited. Model changes are managed through the model registry and the
+        rollback endpoint (vLLM on RunPod). Pharmacist verification required on all prescriptions.
       </p>
     </div>
   );
